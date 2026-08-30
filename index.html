@@ -43,6 +43,11 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 .svc .num{font-weight:700;text-align:right;min-width:74px}
 .svc .num.bad{color:var(--red)}
 
+#intro{margin:0 0 16px;padding:0 0 12px;border-bottom:1px solid var(--rule)}
+#intro h2{border:0;padding:0;margin:0 0 6px;display:block}
+#intro p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.6;max-width:60ch}
+#intro b{color:var(--ink);font-weight:700}
+
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
 #alertbox b{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:5px}
@@ -110,6 +115,13 @@ button.danger:hover{background:var(--red);color:#fff}
 
 <main>
   <div class="col">
+    <div id="intro">
+      <h2>What you're looking at</h2>
+      <p>Nightwatch is an incident console for a small production estate, watched by an AI agent.
+      The right-hand column is the agent's tool surface — <b>exactly what it is allowed to call right now</b>.
+      That set follows incident severity, and only the human on call can change severity. The agent can only ask.</p>
+    </div>
+
     <div id="alertbox" class="none"><b>alerts</b>Nothing firing. All services within SLO.</div>
 
     <h2>Services <span id="svcmeta"></span></h2>
