@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nightwatch — incident console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --steel:#D7DCE0; --panel:#FBFCFD; --ink:#10171C; --dim:#5C6B76; --rule:#AEBAC3;
+  --green:#2F7D4F; --amber:#B87309; --red:#BE3428; --blue:#2C5FA8;
+  --sev:var(--green);
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --disp:"Space Grotesk",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--steel);color:var(--ink);font:13px/1.5 var(--mono)}
+#spine{position:fixed;left:0;top:0;bottom:0;width:7px;background:var(--rule);z-index:5}
+#spine i{position:absolute;bottom:0;left:0;right:0;background:var(--sev);transition:height .45s cubic-bezier(.2,.8,.2,1)}
+header{padding:12px 20px 12px 27px;background:var(--panel);border-bottom:2px solid var(--ink);
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font:700 19px/1 var(--disp);letter-spacing:-.01em;margin:0}
+.tag{font:500 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+#sevpill{margin-left:auto;font:700 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+  color:#fff;background:var(--sev);padding:7px 12px;border-radius:2px}
+#conn{font:400 10px/1 var(--mono);color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;align-items:start;padding-left:7px}
+.col{padding:16px 20px}
+.col+.col{border-left:2px solid var(--rule);min-height:calc(100vh - 52px);background:#E5E9EC}
+h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+  margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between}
+
+.svc{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--green);
+  padding:9px 11px;margin-bottom:6px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center}
+.svc.degraded{border-left-color:var(--amber)}
+.svc.failing{border-left-color:var(--red)}
+.svc.drained{border-left-color:var(--dim);opacity:.55}
+.svc b{font-weight:700}
+.svc .meta{color:var(--dim);font-size:11px}
+.svc .num{font-weight:700;text-align:right;min-width:74px}
+.svc .num.bad{color:var(--red)}
+
+#alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
+#alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
+#alertbox b{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:5px}
+
+.sevbtns{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+button{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;
+  border:1.5px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
+button:hover{background:var(--ink);color:var(--panel)}
+button[disabled]{opacity:.35;cursor:not-allowed;background:var(--panel);color:var(--ink)}
+button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+button.armed{border-color:var(--sev);color:var(--sev);box-shadow:0 0 0 3px color-mix(in srgb,var(--sev) 20%,transparent)}
+button.danger{border-color:var(--red);color:var(--red)}
+button.danger:hover{background:var(--red);color:#fff}
+
+/* signature: the capability tray */
+.tool{background:var(--panel);border:1px solid var(--rule);padding:8px 10px;margin-bottom:5px;
+  border-left:3px solid var(--rule);animation:mount .34s cubic-bezier(.2,.9,.2,1)}
+.tool.w{border-left-color:var(--amber)}
+.tool.d{border-left-color:var(--red)}
+.tool.firing{background:#EAF1FA;border-color:var(--blue);border-left-color:var(--blue)}
+@keyframes mount{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.tool.leaving{animation:unmount .3s ease-in forwards}
+@keyframes unmount{to{opacity:0;transform:translateX(20px);max-height:0;margin:0;padding-top:0;padding-bottom:0}}
+.tool code{font-weight:700;font-size:12px}
+.tool .kind{float:right;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+  border:1px solid var(--rule);padding:1px 4px;border-radius:2px}
+.tool .kind.w{color:var(--amber);border-color:var(--amber)}
+.tool .kind.d{color:var(--red);border-color:var(--red)}
+.tool p{margin:4px 0 0;color:var(--dim);font-size:11px;line-height:1.4}
+.locked{border:1px dashed var(--rule);padding:8px 10px;margin-bottom:5px;color:var(--dim);font-size:11px}
+.locked code{opacity:.65}
+
+#tl{list-style:none;margin:0;padding:0;max-height:280px;overflow:auto}
+#tl li{padding:5px 0;border-bottom:1px dotted var(--rule);display:flex;gap:8px;font-size:11.5px}
+#tl time{color:var(--dim);flex:none}
+.by-agent{color:var(--blue)}.by-human{color:var(--ink)}.by-system{color:var(--dim)}
+
+#veil{position:fixed;inset:0;background:rgba(16,23,28,.55);display:none;place-items:center;z-index:20;padding:20px}
+#veil.on{display:grid}
+#modal{background:var(--panel);border:2px solid var(--ink);max-width:430px;width:100%;padding:18px}
+#modal h3{font:700 15px var(--disp);margin:0 0 4px}
+#modal .who{font:500 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--blue);margin-bottom:9px}
+#modal pre{background:#EDF0F2;border:1px solid var(--rule);padding:9px;margin:0 0 13px;font-size:11.5px;white-space:pre-wrap}
+#modal .row{display:flex;gap:8px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:900px){main{grid-template-columns:1fr}.col+.col{border-left:0;border-top:2px solid var(--rule);min-height:0}}
+</style>
+</head>
+<body>
+<div id="spine"><i></i></div>
+
+<header>
+  <h1>Nightwatch</h1>
+  <span class="tag">incident console · shift 03:00–11:00</span>
+  <span id="conn" class="tag">no agent</span>
+  <span id="sevpill">green</span>
+</header>
+
+<main>
+  <div class="col">
+    <div id="alertbox" class="none"><b>alerts</b>Nothing firing. All services within SLO.</div>
+
+    <h2>Services <span id="svcmeta"></span></h2>
+    <div id="svcs"></div>
+
+    <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
+    <div class="sevbtns" id="sevbtns"></div>
+    <div id="reqnote" class="tag"></div>
+
+    <h2 style="margin-top:20px">Timeline <span>human + agent</span></h2>
+    <ul id="tl"></ul>
+  </div>
+
+  <div class="col">
+    <h2>Agent capabilities <span id="toolcount"></span></h2>
+    <p class="tag" id="authority" style="margin:0 0 10px;line-height:1.6"></p>
+    <div id="tray"></div>
+    <h2 style="margin-top:18px">Not mounted <span>unlocks with severity</span></h2>
+    <div id="locked"></div>
+    <p class="tag" id="syncmode" style="margin-top:14px;line-height:1.5"></p>
+  </div>
+</main>
+
+<div id="veil"><div id="modal">
+  <div class="who">agent is requesting</div>
+  <h3 id="mtitle"></h3>
+  <pre id="mbody"></pre>
+  <div class="row"><button id="mno">Deny</button><button id="myes" class="danger">Approve</button></div>
+</div></div>
+
+<script>
+"use strict";
+
+/* ───────── mock estate ───────── */
+const SERVICES = [
+  {id:"edge-router",     region:"global",  owner:"@tuli",   status:"ok",       p99:41,  err:0.01, version:"v2.19.3"},
+  {id:"checkout-api",    region:"us-east", owner:"@rk",     status:"ok",       p99:88,  err:0.02, version:"v4.12.0"},
+  {id:"payments-worker", region:"us-east", owner:"@rk",     status:"ok",       p99:120, err:0.01, version:"v1.8.7"},
+  {id:"session-store",   region:"us-east", owner:"@amara",  status:"ok",       p99:6,   err:0.00, version:"v3.0.1"},
+  {id:"image-cdn",       region:"global",  owner:"@tuli",   status:"ok",       p99:22,  err:0.00, version:"v9.4.2"},
+];
+const DEPLOYS = {
+  "checkout-api":{from:"v4.11.4", to:"v4.12.0", at:"03:04", by:"@rk", diff:
+`- db.pool.max_connections: 40
++ db.pool.max_connections: 4      # typo, meant 400
+  db.pool.idle_timeout_ms: 30000
++ retry.backoff: exponential`},
+  "payments-worker":{from:"v1.8.6", to:"v1.8.7", at:"01:12", by:"@rk", diff:"  log.level: info -> debug"},
+};
+const LOGS = {
+  "checkout-api":[
+    "03:07:11 WARN  db pool exhausted, 4/4 in use, 61 waiters",
+    "03:07:12 ERROR timeout acquiring connection after 5000ms",
+    "03:07:12 ERROR POST /checkout 503 upstream_unavailable",
+    "03:07:14 WARN  db pool exhausted, 4/4 in use, 188 waiters",
+    "03:07:19 ERROR POST /checkout 503 upstream_unavailable",
+  ],
+  "payments-worker":["03:07:15 WARN  upstream checkout-api 503, queueing", "03:07:20 WARN  queue depth 4120"],
+  "session-store":["03:07:00 INFO  ok"], "edge-router":["03:07:00 INFO  ok"], "image-cdn":["03:07:00 INFO  ok"],
+};
+const DEPS = {
+  "checkout-api":["session-store","payments-worker","postgres-primary"],
+  "payments-worker":["checkout-api","ledger-db"], "session-store":["redis-cluster"],
+  "edge-router":["checkout-api","image-cdn"], "image-cdn":["object-store"],
+};
+const ALERT = {id:"AL-8841", fired:"03:07", service:"checkout-api",
+  text:"checkout-api error rate 14.2% over 5m (SLO 0.5%). p99 1840ms. Paging suppressed pending severity."};
+
+/* ───────── state ───────── */
+const SEV = ["green","yellow","red","blue"];
+const state = {
+  sev:"green", svcs:structuredClone(SERVICES), drained:[], maintenance:false,
+  requested:null, timeline:[], lastFired:null, syncMode:"—",
+};
+const svc = id => state.svcs.find(s => s.id === id);
+
+function log(by, text){ state.timeline.unshift({t:clock(), by, text}); render(); }
+const clock = () => new Date().toTimeString().slice(0,8);
+
+/* ───────── severity: humans only ───────── */
+function setSeverity(next, by){
+  if(!SEV.includes(next) || next === state.sev) return;
+  const prev = state.sev;
+  state.sev = next; state.requested = null;
+  if(next === "yellow" && prev === "green"){        // the incident begins
+    Object.assign(svc("checkout-api"), {status:"failing", p99:1840, err:14.2});
+    Object.assign(svc("payments-worker"), {status:"degraded", p99:900, err:2.1});
+    state.lastFired = ALERT;
+  }
+  log(by, `severity ${prev} → ${next}`);
+  syncTools();
+}
+
+/* ───────── tools ───────── */
+const ok = o => ({ content:[{ type:"text", text: JSON.stringify(o, null, 2) }] });
+const err = m => ok({ error:m });
+const AT = { r:"read", w:"write", d:"destructive" };
+
+function fire(name){                       // highlight the tool in the tray
+  const el = document.querySelector(`[data-tool="${name}"]`);
+  if(el){ el.classList.add("firing"); setTimeout(() => el.classList.remove("firing"), 1500); }
+}
+
+/** Destructive tools stop here until a human clicks. Never auto-resolves. */
+function humanApproval(title, body){
+  try { (document.modelContext ?? navigator.modelContext)?.requestUserInteraction?.(); } catch {}
+  return new Promise(resolve => {
+    document.getElementById("mtitle").textContent = title;
+    document.getElementById("mbody").textContent = body;
+    document.getElementById("veil").classList.add("on");
+    const done = v => { document.getElementById("veil").classList.remove("on"); resolve(v); };
+    document.getElementById("myes").onclick = () => done(true);
+    document.getElementById("mno").onclick  = () => done(false);
+  });
+}
+
+const ALL = [
+  { name:"get_console_state", at:"r", states:SEV,
+    description:"Read the current incident severity, which tools you have at this severity and why, the open alert, and the state of every service. Call this first and after any severity change.",
+    inputSchema:{ type:"object", properties:{}, additionalProperties:false },
+    run: async () => ok({ severity:state.sev, mounted:mounted().map(t => t.name),
+      locked:ALL.filter(t => !t.states.includes(state.sev)).map(t => ({ tool:t.name, unlocks_at:t.states[0] })),
+      open_alert:state.lastFired, maintenance_mode:state.maintenance, drained_regions:state.drained,
+      note:"Severity is changed by the on-call human only. Use request_escalation to ask." }) },
+
+  { name:"list_services", at:"r", states:SEV,
+    description:"List every service with its region, owner, running version and current health numbers.",
+    inputSchema:{ type:"object", properties:{}, additionalProperties:false },
+    run: async () => ok({ services: state.svcs.map(s => ({...s, drained: state.drained.includes(s.region) })) }) },
+
+  { name:"request_escalation", at:"r", states:SEV,
+    description:"Ask the on-call human to raise or lower severity, with your reasoning. This never changes severity — it highlights the button they have to press. Use it when you find evidence that justifies more access.",
+    inputSchema:{ type:"object", properties:{
+      to:{ type:"string", enum:SEV, description:"severity you are asking for" },
+      reason:{ type:"string", description:"the evidence, in one or two sentences" } },
+      required:["to","reason"], additionalProperties:false },
+    run: async ({to, reason}) => {
+      if(!SEV.includes(to)) return err(`severity must be one of ${SEV.join(", ")}`);
+      state.requested = {to, reason};
+      log("agent", `requested ${to} — ${reason}`);
+      return ok({ requested:to, granted:false, message:"The on-call human must press the button. You cannot." }); } },
+
+  { name:"check_health", at:"r", states:["green","yellow","red","blue"],
+    description:"Current latency and error rate for one service, or all of them.",
+    inputSchema:{ type:"object", properties:{ service:{type:"string"} }, additionalProperties:false },
+    run: async ({service}) => {
+      const list = service ? [svc(service)].filter(Boolean) : state.svcs;
+      if(!list.length) return err(`no service "${service}"`);
+      return ok({ health: list.map(s => ({ service:s.id, status:s.status, p99_ms:s.p99, error_rate_pct:s.err, version:s.version })) }); } },
+
+  { name:"get_alert", at:"r", states:["yellow","red","blue"],
+    description:"Read the alert that is currently firing, including what threshold it crossed.",
+    inputSchema:{ type:"object", properties:{}, additionalProperties:false },
+    run: async () => state.lastFired ? ok(state.lastFired) : ok({ alert:null, message:"nothing firing" }) },
+
+  { name:"query_logs", at:"r", states:["yellow","red","blue"],
+    description:"Read recent log lines for a service, optionally filtered by substring. Read-only.",
+    inputSchema:{ type:"object", properties:{
+      service:{ type:"string", description:"service id from list_services" },
+      contains:{ type:"string", description:"only return lines containing this" },
+      limit:{ type:"number" } }, required:["service"], additionalProperties:false },
+    run: async ({service, contains, limit}) => {
+      const l = LOGS[service]; if(!l) return err(`no logs for "${service}"`);
+      let out = contains ? l.filter(x => x.toLowerCase().includes(contains.toLowerCase())) : l;
+      return ok({ service, lines: out.slice(0, limit || 20), truncated: out.length > (limit || 20) }); } },
+
+  { name:"diff_last_deploy", at:"r", states:["yellow","red","blue"],
+    description:"Show what changed in the most recent deploy of a service — versions, who shipped it, when, and the config diff.",
+    inputSchema:{ type:"object", properties:{ service:{type:"string"} }, required:["service"], additionalProperties:false },
+    run: async ({service}) => {
+      const d = DEPLOYS[service];
+      return d ? ok({ service, ...d }) : ok({ service, message:"no deploy in the last 24h" }); } },
+
+  { name:"check_dependencies", at:"r", states:["yellow","red","blue"],
+    description:"List what a service depends on, so you can tell a root cause from a symptom.",
+    inputSchema:{ type:"object", properties:{ service:{type:"string"} }, required:["service"], additionalProperties:false },
+    run: async ({service}) => DEPS[service] ? ok({ service, depends_on:DEPS[service],
+      depended_on_by: Object.entries(DEPS).filter(([,v]) => v.includes(service)).map(([k]) => k) })
+      : err(`no dependency graph for "${service}"`) },
+
+  { name:"rollback_deploy", at:"d", states:["red"],
+    description:"Roll a service back to its previous version. Mounted only at red severity. Stops for the on-call human's approval before anything happens.",
+    inputSchema:{ type:"object", properties:{
+      service:{type:"string"}, to_version:{type:"string"},
+      reason:{ type:"string", description:"shown to the human on the approval card" } },
+      required:["service","reason"], additionalProperties:false },
+    run: async ({service, to_version, reason}) => {
+      const s = svc(service); if(!s) return err(`no service "${service}"`);
+      const d = DEPLOYS[service]; const target = to_version || d?.from;
+      if(!target) return err(`no previous version recorded for ${service}`);
+      if(!await humanApproval(`Roll back ${service}`, `${s.version}  →  ${target}\n\nagent's reason: ${reason}`))
+        return ok({ rolled_back:false, denied_by:"human" });
+      s.version = target; s.status = "ok"; s.p99 = 88; s.err = 0.02;
+      const pw = svc("payments-worker"); if(pw){ pw.status = "ok"; pw.p99 = 120; pw.err = 0.01; }
+      state.lastFired = null;
+      log("human", `approved rollback of ${service} to ${target}`);
+      return ok({ rolled_back:true, service, now:target, error_rate_pct:s.err }); } },
+
+  { name:"drain_region", at:"d", states:["red"],
+    description:"Shift traffic away from a region. Mounted only at red severity. Requires the on-call human's approval.",
+    inputSchema:{ type:"object", properties:{ region:{type:"string"}, reason:{type:"string"} },
+      required:["region","reason"], additionalProperties:false },
+    run: async ({region, reason}) => {
+      if(!state.svcs.some(s => s.region === region)) return err(`no service runs in "${region}"`);
+      if(state.drained.includes(region)) return ok({ drained:true, note:"already drained" });
+      const hit = state.svcs.filter(s => s.region === region).map(s => s.id);
+      if(!await humanApproval(`Drain ${region}`, `takes offline: ${hit.join(", ")}\n\nagent's reason: ${reason}`))
+        return ok({ drained:false, denied_by:"human" });
+      state.drained.push(region);
+      log("human", `approved drain of ${region}`);
+      return ok({ drained:true, region, services_offline:hit }); } },
+
+  { name:"page_owner", at:"w", states:["red"],
+    description:"Page the human who owns a service. Mounted only at red severity. Requires approval — this wakes somebody up.",
+    inputSchema:{ type:"object", properties:{ service:{type:"string"}, message:{type:"string"} },
+      required:["service","message"], additionalProperties:false },
+    run: async ({service, message}) => {
+      const s = svc(service); if(!s) return err(`no service "${service}"`);
+      if(!await humanApproval(`Page ${s.owner}`, `owner of ${service}\n\n"${message}"`))
+        return ok({ paged:false, denied_by:"human" });
+      log("human", `approved page to ${s.owner}`);
+      return ok({ paged:true, owner:s.owner }); } },
+
+  { name:"set_maintenance_mode", at:"d", states:["red"],
+    description:"Put the whole estate behind a maintenance page. Mounted only at red severity. Requires approval.",
+    inputSchema:{ type:"object", properties:{ enabled:{type:"boolean"}, reason:{type:"string"} },
+      required:["enabled","reason"], additionalProperties:false },
+    run: async ({enabled, reason}) => {
+      if(!await humanApproval(enabled ? "Enter maintenance mode" : "Leave maintenance mode",
+        `all public traffic ${enabled ? "sees a maintenance page" : "resumes"}\n\nagent's reason: ${reason}`))
+        return ok({ changed:false, denied_by:"human" });
+      state.maintenance = enabled;
+      log("human", `approved maintenance mode ${enabled ? "on" : "off"}`);
+      return ok({ maintenance_mode:enabled }); } },
+
+  { name:"generate_postmortem", at:"r", states:["blue"],
+    description:"Draft a postmortem from the recorded timeline. Mounted only after the incident is resolved.",
+    inputSchema:{ type:"object", properties:{}, additionalProperties:false },
+    run: async () => ok({ incident:ALERT.id, detected:ALERT.fired, service:ALERT.service,
+      timeline: state.timeline.slice().reverse().map(e => `${e.t} [${e.by}] ${e.text}`),
+      contributing_change: DEPLOYS["checkout-api"],
+      note:"Draft only. A human owns the writeup." }) },
+
+  { name:"export_timeline", at:"r", states:["blue"],
+    description:"Export every human and agent action taken during the incident, oldest first.",
+    inputSchema:{ type:"object", properties:{}, additionalProperties:false },
+    run: async () => ok({ entries: state.timeline.slice().reverse().map(e => ({ at:e.t, by:e.by, action:e.text })) }) },
+];
+
+const mounted = () => ALL.filter(t => t.states.includes(state.sev));
+
+/* ───────── the point: the tool surface follows the severity ───────── */
+let handles = [];
+function spec(t){
+  return { name:t.name, description:t.description, inputSchema:t.inputSchema,
+    annotations:{ readOnlyHint: t.at === "r", destructiveHint: t.at === "d" },
+    execute: async args => { fire(t.name); log("agent", `called ${t.name}`); return t.run(args || {}); } };
+}
+async function syncTools(){
+  const ctx = document.modelContext ?? navigator.modelContext;
+  if(!ctx) return;
+  const want = mounted().map(spec);
+  try{
+    if(typeof ctx.provideContext === "function"){
+      await ctx.provideContext({ tools:want });          // replaces the whole surface
+      state.syncMode = "provideContext() — full surface replaced on every severity change";
+    }else{
+      handles.forEach(h => { try{ h?.unregister?.(); }catch{} });
+      handles = want.map(t => { try{ return ctx.registerTool(t); }catch{ return null; } });
+      state.syncMode = handles.some(h => h?.unregister)
+        ? "registerTool() + unregister() handles"
+        : "registerTool() only — this browser cannot unmount, tools still refuse out of severity";
+    }
+  }catch(e){ state.syncMode = "sync failed: " + e.message; }
+  render();
+}
+
+/* ───────── render ───────── */
+function render(){
+  document.documentElement.style.setProperty("--sev", `var(--${state.sev})`);
+  document.getElementById("spine").firstElementChild.style.height =
+    ({green:"25%", yellow:"55%", red:"100%", blue:"70%"})[state.sev];
+  document.getElementById("sevpill").textContent = state.sev + (state.maintenance ? " · maintenance" : "");
+
+  const a = document.getElementById("alertbox");
+  if(state.lastFired){ a.className = ""; a.innerHTML = `<b>${state.lastFired.id} · fired ${state.lastFired.fired}</b>${state.lastFired.text}`; }
+  else { a.className = "none"; a.innerHTML = `<b>alerts</b>Nothing firing. All services within SLO.`; }
+
+  document.getElementById("svcmeta").textContent = state.drained.length ? `${state.drained.join(", ")} drained` : "";
+  document.getElementById("svcs").innerHTML = state.svcs.map(s => `
+    <div class="svc ${state.drained.includes(s.region) ? "drained" : s.status}">
+      <div><b>${s.id}</b> <span class="meta">${s.version} · ${s.region} · ${s.owner}</span></div>
+      <div class="num">${s.p99}ms</div>
+      <div class="num ${s.err > 1 ? "bad" : ""}">${s.err.toFixed(2)}%</div>
+    </div>`).join("");
+
+  const bar = document.getElementById("sevbtns"); bar.innerHTML = "";
+  SEV.forEach(s => {
+    const b = document.createElement("button");
+    b.textContent = s; b.disabled = s === state.sev;
+    if(state.requested?.to === s) b.classList.add("armed");
+    b.onclick = () => setSeverity(s, "human");
+    bar.appendChild(b);
+  });
+  document.getElementById("reqnote").textContent = state.requested
+    ? `agent is asking for ${state.requested.to}: ${state.requested.reason}` : "";
+
+  const m = mounted();
+  document.getElementById("toolcount").textContent = `${m.length} mounted`;
+  const writes = m.filter(t => t.at !== "r").length;
+  document.getElementById("authority").textContent = writes
+    ? `At ${state.sev} the agent can change ${writes} thing(s) — each one stops for your approval.`
+    : `At ${state.sev} the agent can look, and ask. It cannot change anything.`;
+
+  document.getElementById("tray").innerHTML = m.map(t => `
+    <div class="tool ${t.at}" data-tool="${t.name}">
+      <span class="kind ${t.at}">${AT[t.at]}</span><code>${t.name}</code>
+      <p>${t.description.split(".")[0]}.</p>
+    </div>`).join("");
+
+  document.getElementById("locked").innerHTML = ALL.filter(t => !t.states.includes(state.sev))
+    .map(t => `<div class="locked"><code>${t.name}</code> — mounts at ${t.states[0]}</div>`).join("") || `<p class="tag">Everything is mounted.</p>`;
+
+  document.getElementById("syncmode").textContent = state.syncMode === "—" ? "" : state.syncMode;
+  document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
+    .map(e => `<li><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
+}
+
+/* ───────── boot ───────── */
+const ctx = document.modelContext ?? navigator.modelContext;
+if(ctx){
+  document.getElementById("conn").textContent = "agent connected";
+  syncTools();
+  log("system", `console open at green — ${mounted().length} tools mounted`);
+}else{
+  document.getElementById("conn").textContent = "no webmcp in this browser";
+  log("system", "open in the ChatGPT desktop browser, or Chrome with chrome://flags/#enable-webmcp-testing");
+  render();
+}
+
+/* ───────── self-check: ?selftest ───────── */
+if(location.search.includes("selftest")){
+  const t = n => ALL.find(x => x.name === n), a = console.assert;
+  a(mounted().every(x => x.at === "r"), "green mounts nothing that writes");
+  a(!t("rollback_deploy").states.includes("green"), "rollback is not mounted at green");
+  a(!t("rollback_deploy").states.includes("blue"), "rollback unmounts once resolved");
+  a(t("generate_postmortem").states.join() === "blue", "postmortem only at blue");
+  t("request_escalation").run({to:"red", reason:"x"}).then(r => {
+    a(state.sev === "green", "the agent's request did not change severity");
+    state.requested = null; render();
+  });
+  a(ALL.every(x => x.inputSchema.type === "object" && x.description.length > 40), "every tool has an object schema and a real description");
+  log("system", "self-check ran — see console for failures");
+}
+</script>
+</body>
+</html>
