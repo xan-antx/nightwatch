@@ -74,6 +74,13 @@ button.danger:hover{background:var(--red);color:#fff}
 .tool p{margin:4px 0 0;color:var(--dim);font-size:11px;line-height:1.4}
 .locked{border:1px dashed var(--rule);padding:8px 10px;margin-bottom:5px;color:var(--dim);font-size:11px}
 .locked code{opacity:.65}
+.tool.sealed{background:#E8EBED;border-left-color:var(--dim)}
+.tool.sealed code{text-decoration:line-through;color:var(--dim)}
+.tool.sealed p{color:var(--dim)}
+.kind.sealed{color:var(--dim);border-color:var(--dim)}
+#truth{margin-top:12px;padding:8px 10px;border:1px solid var(--rule);background:var(--panel);
+  font-size:11px;line-height:1.5;color:var(--dim)}
+#truth b{color:var(--ink)}
 
 #tl{list-style:none;margin:0;padding:0;max-height:280px;overflow:auto}
 #tl li{padding:5px 0;border-bottom:1px dotted var(--rule);display:flex;gap:8px;font-size:11.5px}
@@ -120,9 +127,13 @@ button.danger:hover{background:var(--red);color:#fff}
     <h2>Agent capabilities <span id="toolcount"></span></h2>
     <p class="tag" id="authority" style="margin:0 0 10px;line-height:1.6"></p>
     <div id="tray"></div>
-    <h2 style="margin-top:18px">Not mounted <span>unlocks with severity</span></h2>
+    <div id="sealedwrap" hidden>
+      <h2 style="margin-top:18px">Sealed <span>registered, refusing</span></h2>
+      <div id="sealed"></div>
+    </div>
+    <h2 style="margin-top:18px">Not yet mounted <span>unlocks with severity</span></h2>
     <div id="locked"></div>
-    <p class="tag" id="syncmode" style="margin-top:14px;line-height:1.5"></p>
+    <div id="truth"></div>
   </div>
 </main>
 
@@ -355,28 +366,42 @@ const ALL = [
 const mounted = () => ALL.filter(t => t.states.includes(state.sev));
 
 /* ───────── the point: the tool surface follows the severity ───────── */
-let handles = [];
+const registered = new Set();          // names this page has handed to the browser
+state.browserTools = [];               // what the browser says it actually has
+
 function spec(t){
   return { name:t.name, description:t.description, inputSchema:t.inputSchema,
     annotations:{ readOnlyHint: t.at === "r", destructiveHint: t.at === "d" },
-    execute: async args => { fire(t.name); log("agent", `called ${t.name}`); return t.run(args || {}); } };
+    execute: async args => {
+      fire(t.name);
+      if(!t.states.includes(state.sev)){          // sealed: registered, but not permitted now
+        log("agent", `${t.name} refused — sealed at ${state.sev}`);
+        return err(`${t.name} is sealed at severity ${state.sev}. It operates at: ${t.states.join(", ")}. ` +
+          `Ask the on-call human with request_escalation — this browser has no way to unregister a tool, ` +
+          `so the console refuses the call instead.`);
+      }
+      log("agent", `called ${t.name}`);
+      return t.run(args || {});
+    } };
 }
+
 async function syncTools(){
   const ctx = document.modelContext ?? navigator.modelContext;
   if(!ctx) return;
-  const want = mounted().map(spec);
+  // Add-only. ChatGPT's browser exposes registerTool/getTools/executeTool and nothing that removes,
+  // and re-registering an existing name throws — so tools mount once and are sealed thereafter.
+  for(const t of mounted()){
+    if(registered.has(t.name)) continue;
+    try{ await ctx.registerTool(spec(t)); registered.add(t.name); }
+    catch(e){ log("system", `registerTool(${t.name}) failed: ${e?.message || "no message"}`); }
+  }
   try{
-    if(typeof ctx.provideContext === "function"){
-      await ctx.provideContext({ tools:want });          // replaces the whole surface
-      state.syncMode = "provideContext() — full surface replaced on every severity change";
-    }else{
-      handles.forEach(h => { try{ h?.unregister?.(); }catch{} });
-      handles = want.map(t => { try{ return ctx.registerTool(t); }catch{ return null; } });
-      state.syncMode = handles.some(h => h?.unregister)
-        ? "registerTool() + unregister() handles"
-        : "registerTool() only — this browser cannot unmount, tools still refuse out of severity";
-    }
-  }catch(e){ state.syncMode = "sync failed: " + e.message; }
+    const got = await ctx.getTools?.();
+    state.browserTools = (got || []).map(x => x?.name ?? x).filter(Boolean);
+  }catch{ state.browserTools = null; }
+  state.syncMode = typeof ctx.getTools === "function"
+    ? "registerTool() + getTools() — add-only surface, verified against the browser"
+    : "registerTool() only — cannot read back the surface";
   render();
 }
 
@@ -423,10 +448,24 @@ function render(){
       <p>${t.description.split(".")[0]}.</p>
     </div>`).join("");
 
-  document.getElementById("locked").innerHTML = ALL.filter(t => !t.states.includes(state.sev))
-    .map(t => `<div class="locked"><code>${t.name}</code> — mounts at ${t.states[0]}</div>`).join("") || `<p class="tag">Everything is mounted.</p>`;
+  const sealed = ALL.filter(t => registered.has(t.name) && !t.states.includes(state.sev));
+  document.getElementById("sealedwrap").hidden = !sealed.length;
+  document.getElementById("sealed").innerHTML = sealed.map(t => `
+    <div class="tool sealed" data-tool="${t.name}">
+      <span class="kind sealed">sealed</span><code>${t.name}</code>
+      <p>Still registered — the browser has no way to remove it. Calls are refused until severity is ${t.states.join(" or ")}.</p>
+    </div>`).join("");
 
-  document.getElementById("syncmode").textContent = state.syncMode === "—" ? "" : state.syncMode;
+  const never = ALL.filter(t => !registered.has(t.name) && !t.states.includes(state.sev));
+  document.getElementById("locked").innerHTML = never.length
+    ? never.map(t => `<div class="locked"><code>${t.name}</code> — mounts at ${t.states[0]}</div>`).join("")
+    : `<p class="tag">Nothing left to mount.</p>`;
+
+  const bt = state.browserTools;
+  document.getElementById("truth").innerHTML =
+    `<b>${m.length}</b> permitted at ${state.sev} · <b>${sealed.length}</b> sealed · ` +
+    `browser reports <b>${bt === null ? "?" : bt.length}</b> registered` +
+    (state.syncMode === "—" ? "" : `<br>${state.syncMode}`);
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
     .map(e => `<li><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
 }

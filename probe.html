@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebMCP surface probe</title>
+<style>
+body{font:14px/1.6 ui-monospace,monospace;margin:0;padding:20px;background:#0E1418;color:#D7E0E6}
+h1{font-size:17px;margin:0 0 14px}
+.r{border-left:3px solid #3D5A6C;padding:6px 0 6px 11px;margin-bottom:9px;white-space:pre-wrap}
+.y{border-left-color:#3FA46A;color:#8FE0B0}
+.n{border-left-color:#B4463A;color:#E39C93}
+b{color:#fff}
+</style></head>
+<body>
+<h1>WebMCP surface probe</h1>
+<div id="out"></div>
+<script>
+const out = document.getElementById("out");
+const say = (t, k = "") => { const d = document.createElement("div"); d.className = "r " + k; d.textContent = t; out.appendChild(d); };
+const yes = t => say("YES  " + t, "y");
+const no  = t => say("no   " + t, "n");
+
+(async () => {
+  const onDoc = !!window.document.modelContext, onNav = !!window.navigator.modelContext;
+  say(`document.modelContext: ${onDoc}   navigator.modelContext: ${onNav}`);
+  const ctx = document.modelContext ?? navigator.modelContext;
+  if(!ctx){ no("no modelContext at all — wrong browser or not a secure context"); return; }
+  say(`same object on both: ${onDoc && onNav && document.modelContext === navigator.modelContext}`);
+
+  const names = new Set();
+  for(let o = ctx; o && o !== Object.prototype; o = Object.getPrototypeOf(o))
+    Object.getOwnPropertyNames(o).forEach(n => names.add(n));
+  say("ALL PROPERTIES AND METHODS:\n" + [...names].sort().join("\n"));
+
+  const mk = (name, desc) => ({ name, description: desc,
+    inputSchema:{ type:"object", properties:{}, additionalProperties:false },
+    execute: async () => ({ content:[{ type:"text", text:name }] }) });
+
+  // 1. what does registerTool hand back?
+  let h;
+  try{ h = await ctx.registerTool(mk("probe_alpha", "First probe tool. Should be callable.")); }
+  catch(e){ no("registerTool threw: " + e.message); }
+  say(`registerTool returned: ${Object.prototype.toString.call(h)}`);
+  if(h && typeof h === "object"){
+    const hn = new Set();
+    for(let o = h; o && o !== Object.prototype; o = Object.getPrototypeOf(o))
+      Object.getOwnPropertyNames(o).forEach(n => hn.add(n));
+    say("handle members:\n" + [...hn].sort().join("\n"));
+  }
+
+  // 2. every plausible removal path
+  for(const m of ["unregister","remove","dispose","destroy","cancel","abort"])
+    typeof h?.[m] === "function" ? yes(`handle.${m}()`) : no(`handle.${m}()`);
+  for(const m of ["unregisterTool","removeTool","deleteTool","clearTools","provideContext","registerTools","setTools","listTools","getTools"])
+    typeof ctx[m] === "function" ? yes(`modelContext.${m}()`) : no(`modelContext.${m}()`);
+
+  // 3. does re-registering the same name replace it? (the fallback that saves us)
+  try{
+    await ctx.registerTool(mk("probe_alpha", "SECOND registration, same name. If the agent sees this text, re-registration REPLACES."));
+    yes("re-registering an existing name did not throw");
+    say("→ ask the agent to list its tools. If probe_alpha appears ONCE with the SECOND description, replacement works and we can seal tools in place.");
+  }catch(e){ no("re-registering the same name threw: " + e.message); }
+
+  // 4. does a tool registered later in the session become visible?
+  setTimeout(async () => {
+    try{ await ctx.registerTool(mk("probe_late", "Registered 4 seconds after page load. If the agent can call this, mid-session mounting works."));
+      yes("late registration did not throw — now ask the agent to call probe_late"); }
+    catch(e){ no("late registration threw: " + e.message); }
+  }, 4000);
+})();
+</script>
+</body>
+</html>
