@@ -47,6 +47,14 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #intro h2{border:0;padding:0;margin:0 0 6px;display:block}
 #intro p{margin:0;color:var(--dim);font-size:11.5px;line-height:1.6;max-width:60ch}
 #intro b{color:var(--ink);font-weight:700}
+#webmcpnote{margin-top:8px}
+
+#recon{display:flex;background:var(--panel);border:1px solid var(--rule);margin:0 0 10px}
+#recon .fig{flex:1;padding:10px 8px;text-align:center}
+#recon .fig+.fig{border-left:1px solid var(--rule)}
+#recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
+#recon .fig span{font:500 9px/1.4 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+#sealnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
@@ -120,6 +128,8 @@ button.danger:hover{background:var(--red);color:#fff}
       <p>Nightwatch is an incident console for a small production estate, watched by an AI agent.
       The right-hand column is the agent's tool surface — <b>exactly what it is allowed to call right now</b>.
       That set follows incident severity, and only the human on call can change severity. The agent can only ask.</p>
+      <p id="webmcpnote" hidden>This page only comes alive in a browser that supports WebMCP —
+      ChatGPT's built-in browser, or Chrome 149+ with chrome://flags/#enable-webmcp-testing.</p>
     </div>
 
     <div id="alertbox" class="none"><b>alerts</b>Nothing firing. All services within SLO.</div>
@@ -137,6 +147,13 @@ button.danger:hover{background:var(--red);color:#fff}
 
   <div class="col">
     <h2>Agent capabilities <span id="toolcount"></span></h2>
+    <div id="recon">
+      <div class="fig"><b id="rperm">0</b><span id="rpermlabel">permitted</span></div>
+      <div class="fig"><b id="rseal">0</b><span>sealed</span></div>
+      <div class="fig"><b id="rreg">?</b><span>registered<br>per browser</span></div>
+    </div>
+    <p id="sealnote" hidden>ChatGPT's browser exposes registerTool and getTools but nothing that removes a tool,
+    so tools that fall out of severity stay registered — the page refuses the call instead.</p>
     <p class="tag" id="authority" style="margin:0 0 10px;line-height:1.6"></p>
     <div id="tray"></div>
     <div id="sealedwrap" hidden>
@@ -474,10 +491,13 @@ function render(){
     : `<p class="tag">Nothing left to mount.</p>`;
 
   const bt = state.browserTools;
-  document.getElementById("truth").innerHTML =
-    `<b>${m.length}</b> permitted at ${state.sev} · <b>${sealed.length}</b> sealed · ` +
-    `browser reports <b>${bt === null ? "?" : bt.length}</b> registered` +
-    (state.syncMode === "—" ? "" : `<br>${state.syncMode}`);
+  document.getElementById("rperm").textContent = m.length;
+  document.getElementById("rpermlabel").textContent = `permitted at ${state.sev}`;
+  document.getElementById("rseal").textContent = sealed.length;
+  document.getElementById("rreg").textContent = bt === null ? "?" : bt.length;
+  document.getElementById("sealnote").hidden = !sealed.length;
+  document.getElementById("truth").hidden = state.syncMode === "—";
+  document.getElementById("truth").textContent = state.syncMode;
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
     .map(e => `<li><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
 }
@@ -490,7 +510,7 @@ if(ctx){
   log("system", `console open at green — ${mounted().length} tools mounted`);
 }else{
   document.getElementById("conn").textContent = "no webmcp in this browser";
-  log("system", "open in the ChatGPT desktop browser, or Chrome with chrome://flags/#enable-webmcp-testing");
+  document.getElementById("webmcpnote").hidden = false;
   render();
 }
 
