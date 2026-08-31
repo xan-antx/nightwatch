@@ -1,65 +1,98 @@
 # Nightwatch
 
-An incident console where the agent's tool surface is mounted and unmounted by incident severity.
+An incident console where the AI agent's tool surface follows incident severity.
+Tools mount as things get worse, unmount when they're over, and only the human
+on call can change how bad things are.
 
-One HTML file. No build, no dependencies, no backend.
+One HTML file plus a vendored animation library. No build step, no backend.
+
+**Live:** https://vocal-cascaron-3227b4.netlify.app
+**Requires a WebMCP browser** — ChatGPT's desktop app browser (GPT-5.6 Sol or
+Terra), or Chrome 149+ with `chrome://flags/#enable-webmcp-testing`.
 
 ## The idea
 
-Most WebMCP apps register a static array of tools at page load and leave it there. Nightwatch
-treats the tool surface as state. What the agent is allowed to do is a function of how bad the
-incident is, and only the on-call human can change that.
+Most WebMCP pages register a static list of tools at load and leave it there.
+Nightwatch treats the tool surface as state: what the agent is *able* to do is
+a function of how serious the incident is, and severity belongs to the human.
 
-| Severity | Mounted | Effect |
-|---|---|---|
-| **green** | `get_console_state`, `list_services`, `check_health`, `request_escalation` | The agent can look and ask. It cannot touch production. |
-| **yellow** | + `get_alert`, `query_logs`, `diff_last_deploy`, `check_dependencies` | Read-only investigation. Enough to find a root cause. |
-| **red** | + `rollback_deploy`, `drain_region`, `page_owner`, `set_maintenance_mode` | Write access, granted because a human declared an incident. Each call stops for approval. |
-| **blue** | destructive tools unmount, + `generate_postmortem`, `export_timeline` | No fat-fingering a rollback after the incident is over. |
+| Severity   | Tools registered | What the agent can do |
+| ---------- | ---------------- | --------------------- |
+| **green**  | `get_console_state` `list_services` `check_health` `request_escalation` | Look, and ask. Nothing that touches production exists yet. |
+| **yellow** | + `get_alert` `query_logs` `diff_last_deploy` `check_dependencies` | Read-only investigation — enough to find a root cause. |
+| **red**    | + `rollback_deploy` `drain_region` `page_owner` `set_maintenance_mode` | Change production. Every one of these blocks on an in-page human approval before executing. |
+| **blue**   | destructive four unregistered, + `generate_postmortem` `export_timeline` | Write the story down. The rollback tool no longer exists to fat-finger. |
 
 Three rules live in code, not in a prompt:
 
-1. **Severity is human-only.** `request_escalation` never changes it — it arms the button you press.
-2. **Destructive tools block on a human click.** `rollback_deploy`, `drain_region`, `page_owner` and
-   `set_maintenance_mode` return nothing until you approve or deny in the page.
-3. **Out-of-severity tools are not registered.** Not hidden, not guarded at call time — absent from
-   the surface the agent can see.
+1. **Severity is human-only.** The agent's `request_escalation` never changes
+   it — it arms the button and states the evidence. You press.
+2. **Destructive calls block on a click.** `rollback_deploy` and friends return
+   nothing until the person approves or denies on the page itself.
+3. **Out-of-severity tools are not registered.** Not hidden, not refused at
+   call time — absent from the surface. The sidebar shows the browser's own
+   `getTools()` count next to the console's, so the agreement is proved on
+   screen, not asserted.
 
-## Run it
+## How unmounting actually works
 
-WebMCP needs a secure context, so `file://` won't register tools. Deploy first.
+The WebMCP draft removed `unregisterTool()` on 23 April 2026. The only
+removal path is an `AbortSignal` passed at registration:
 
-- Drag this folder onto [app.netlify.com/drop](https://app.netlify.com/drop), or `vercel deploy`.
-- **ChatGPT:** desktop app → built-in browser → your URL. Use **GPT-5.6 Sol or Terra** (Luna has
-  WebMCP disabled). Not available in Enterprise or Edu workspaces.
-- **Chrome:** 149+, enable `chrome://flags/#enable-webmcp-testing`, restart.
-- **Self-check:** append `?selftest`, open the console. Asserts that green mounts nothing that
-  writes, that rollback is absent at green and gone again at blue, and that the agent's escalation
-  request does not move severity.
+```js
+const ac = new AbortController();
+await document.modelContext.registerTool(tool, { signal: ac.signal });
+ac.abort();   // tool is gone
+```
 
-## Spec notes
+`syncTools()` keeps one `AbortController` per tool. On every severity change it
+registers what became permitted and aborts what didn't, then re-reads
+`getTools()` to display what the browser really holds. Verified in ChatGPT's
+desktop browser — `probe.html` in this repo is the test that proved it, along
+with every removal path that *doesn't* exist there (`unregisterTool`,
+`provideContext`, handle methods — all absent; the signal is the way).
 
-The API moved from `navigator.modelContext` to `document.modelContext` in the 21 July 2026 draft and
-Chrome 150 deprecates the old location, so registration feature-detects both.
+Registration feature-detects `document.modelContext` with a
+`navigator.modelContext` fallback, since the API moved to `document` in the
+21 July draft and Chrome 150 deprecates the old location.
 
-For unmounting, `syncTools()` prefers `provideContext({tools})` — replacing the whole surface on
-every severity change — and falls back to `registerTool()` with `unregister()` handles. If a browser
-supports neither, the sidebar says so, and out-of-severity tools still refuse at call time. The
-sidebar always shows which path is live.
+## Run it locally
 
-## Demo script
+WebMCP needs a secure context, so `file://` won't register tools.
 
-Open in ChatGPT's browser at green and say:
+- Drag this folder onto [app.netlify.com/drop](https://app.netlify.com/drop),
+  or `vercel deploy`, or any static host. `motion.min.js` (vendored, from the
+  `motion` npm package — see `package.json`) must ship next to `index.html`.
+- Open the URL in ChatGPT's desktop browser on **GPT-5.6 Sol or Terra** (Luna
+  has WebMCP disabled; Enterprise/Edu workspaces don't get site tools), or in
+  Chrome 149+ with the flag above.
+- In a browser without WebMCP the console still runs and explains itself; the
+  tool surface just has nothing to attach to.
+- Append `?selftest` and open the console for assertions on the severity
+  rules: nothing writable at green, rollback absent from green and blue,
+  postmortem only at blue, and the agent's escalation request never moving
+  severity.
 
-> Something's wrong with checkout. Look into it.
+## Try this
 
-At green it has no logs and no deploy history. A good run calls `request_escalation` and tells you
-why. Press **yellow**: four investigation tools animate into the tray. Ask it to continue and it
-finds the deploy at 03:04 that set `max_connections` to 4 instead of 400, then asks for red.
+Open at green and say: **"Something's wrong with checkout. Look into it."**
 
-Press **red**: the destructive tools mount. Tell it to roll back. It calls `rollback_deploy`, the
-approval card appears, you approve, error rate drops to 0.02%. Press **blue** and watch the
-rollback and drain tools unmount while the postmortem tools appear.
+At green the agent has no logs and no deploy history — a good run calls
+`request_escalation` and tells you why. Press **yellow**: four investigation
+tools slide into the tray. It finds the 03:04 deploy that set
+`max_connections` to 4 instead of 400 and asks for more. Press **red**, tell
+it to roll back, and the approval card stops everything until you click. Press
+**blue** and watch the four destructive tools leave the tray — and the
+browser's registered count drop with them. Then ask it to roll back again,
+and it will tell you the capability no longer exists.
+
+## Files
+
+- `index.html` — the whole app: UI, state, tools, registration lifecycle
+- `motion.min.js` — vendored Motion (animation), loaded by a script tag
+- `probe.html` — the API-surface probe that established what ChatGPT's
+  browser supports, including the AbortSignal verdict
+- `NOTES.md` — working notes and constraints for AI-assisted edits
 
 ## License
 

@@ -1,73 +1,65 @@
-# Nightwatch — session handoff notes
+# NOTES — working context for AI-assisted edits
 
-_Last updated: 2026-08-31_
+Read this before touching anything.
 
-## What this project is
+## What this is
 
-A single-file WebMCP demo: `index.html`, vanilla JS, no build step, no
-dependencies. It's a mock incident console where an AI agent's tool surface
-grows and shrinks with incident severity (green → yellow → red → blue). The
-core demo point: ChatGPT's browser exposes `registerTool`/`getTools` but **no
-way to unregister a tool**, so the page mounts tools add-only and "seals" them
-(refuses calls in the tool's `execute` wrapper) when severity drops back out
-of their range. Only a human can change severity; destructive tools stop at a
-`humanApproval()` modal.
+Nightwatch: a single-file WebMCP demo (`index.html`, vanilla JS, no build) for
+the WebMCP Challenge (deadline Sep 3, 2026, 1pm PT). An incident console where
+the agent's tool surface mounts and unmounts with severity. **The build is
+verified working in ChatGPT's desktop browser.** Remaining work is packaging
+(video, Devpost text), not features.
 
-Tested and working in ChatGPT's built-in browser. `probe.html` is a scratch
-probe file, not part of the demo.
+## Current architecture — the truth as of the last verified run
 
-## Do not touch (tuned / verified working)
+- 14 tools in the `ALL` array, each with a `states` list naming the severities
+  it exists at. green=4, yellow=8, red=12, blue=10.
+- `syncTools()` keeps a `controllers` Map (name → AbortController). Registration
+  passes `{ signal }`; unmounting is `controller.abort()`. This is the spec's
+  only removal path (`unregisterTool` was removed 23 Apr 2026) and it is
+  **verified working in ChatGPT's browser** via probe.html: after abort,
+  `getTools()` no longer lists the tool.
+- After every sync, `state.browserTools` is re-read from `ctx.getTools()` and
+  the UI shows the browser's count beside the console's. They agree by
+  construction; showing both is the point.
+- Severity changes are human-only (`setSeverity` is called from buttons).
+  `request_escalation` records a request and arms the button — never changes
+  state.
+- Destructive tools (`rollback_deploy`, `drain_region`, `page_owner`,
+  `set_maintenance_mode`) await `humanApproval()` — a promise resolved only by
+  an in-page click. ChatGPT's browser tolerates 100+ second tool calls; do not
+  add timeouts.
+- Registration targets `document.modelContext ?? navigator.modelContext`.
+  ChatGPT exposes only: `registerTool`, `getTools`, `executeTool`,
+  `codexGetTools`, `codexExecuteTool`. `registerTool` returns undefined and
+  duplicate names throw — never re-register an existing name.
+- Motion (`motion.min.js`, vendored) animates exactly three moments: cards
+  mounting (stagger, slide), cards leaving (ghost fade-out), and the recon
+  numbers ticking. `canAnimate()` gates on Motion presence and
+  prefers-reduced-motion. Nothing else animates.
 
-- `syncTools()`, `spec()`, the `ALL` tools array, `registerTool`/`getTools`
-  calls, the `registered` set, `humanApproval()`
-- **Tool description strings** — the agent reads these and they are tuned
-- Registration is add-only and re-registering a name throws; don't "fix" that
+## Do not touch without explicit instruction
 
-`node --check` the extracted `<script>` after any edit (pull the script body
-out of index.html and check it; there's no build or test runner).
+- `syncTools()`, the `controllers`/`registered` bookkeeping, `spec()`
+- The `ALL` tools array structure and every tool **description string** — the
+  agent reads those and they are tuned; the unprompted `request_escalation`
+  behavior depends on them
+- `humanApproval()`
+- The severity state machine (`setSeverity`, `SEV`, human-only rule)
 
-## What was done recently (all committed, tree clean except .claude/)
+## Working rules
 
-1. `de2d426` — Intro panel (`#intro`) at the top of the left column: three
-   lines of product copy for a judge opening the page in plain Chrome with no
-   agent. Quiet styling, reuses existing CSS vars, no colored callout.
-2. `3c5bcbd` —
-   - `#webmcpnote`: a dim sentence appended to the intro **only when WebMCP is
-     unavailable** (unhidden in the boot else-branch), pointing at ChatGPT's
-     browser or Chrome 149+ with `chrome://flags/#enable-webmcp-testing`. The
-     old equivalent timeline log line was removed so the message isn't in two
-     places.
-   - `#recon`: the reconciliation stats ("N permitted at <sev> · N sealed ·
-     N registered per browser") promoted from the bottom `#truth` box to
-     directly under the "Agent capabilities" heading — three large
-     Space Grotesk numbers with small uppercase labels. `#sealnote` below it
-     appears only when sealed > 0 and explains the no-unregister limitation.
-   - `#truth` now shows only the sync-mode line and is hidden until
-     `syncTools()` has run.
+- One scoped change at a time; show it, wait for go-ahead.
+- `node --check` on the extracted script after every edit.
+- Anything touching registration must be re-verified in ChatGPT's real
+  browser before it counts as done — stubs prove logic, not the browser.
+- Commit after each verified change with a message describing what a judge
+  would see.
 
-**Untested path:** the sealed > 0 state (stats + `#sealnote`) needs a real
-WebMCP browser — register tools at yellow/red, then drop severity. Verify once
-in ChatGPT's browser; everything else was checked visually in a plain browser.
+## History worth knowing
 
-## New: .claude/skills/ (uncommitted, gitignored)
-
-`npx ui-ux-pro-max-cli init --ai claude` installed 7 project skills
-(~4.6 MB, 172 files) under `.claude/skills/`: ui-ux-pro-max, design,
-design-system, brand, ui-styling, slides, banner-design. They load at session
-start, so they were installed but **never active in the previous session** —
-the restart this handoff precedes is what activates them. The directory is
-in `.gitignore` (vendored content, regenerable with the npx command above).
-
-Note: some of these skills assume stacks (shadcn/Tailwind, Gemini image
-generation) that don't apply to this vanilla single-file project. Use
-ui-ux-pro-max for styling/UX advice; ignore the rest unless asked.
-
-## Next steps / open items
-
-- Verify the sealed-state UI in ChatGPT's browser (see "Untested path").
-- The user may want UI polish passes using the newly installed skills — that
-  was the motivation for installing them. Same constraints will likely apply:
-  single file, no deps, match existing CSS variables, don't touch tool
-  descriptions or registration logic.
-- Workflow so far: make one scoped change, show it in the browser pane,
-  stop and wait for the user's go-ahead before the next task.
+The project briefly shipped a "sealed" state (tools registered but refusing out
+of severity) built on the wrong assumption that this browser couldn't unmount.
+probe.html then established the AbortSignal path works, and the seal was
+removed in favour of real unmounting. The probe file stays in the repo as the
+evidence trail.
