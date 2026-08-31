@@ -56,7 +56,7 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:400 11px/1.4 var(--mono);color:var(--dim)}
-#sealnote,#sealhint,#plainnote,#authority,#reqnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#authority,#reqnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 #reqnote{margin:0}
 #reqnote:empty{display:none}
 
@@ -91,10 +91,6 @@ button.danger:hover{background:var(--red);color:#fff}
 .tool p{margin:4px 0 0;color:var(--dim);font-size:11px;line-height:1.4}
 .locked{border:1px dashed var(--rule);padding:8px 10px;margin-bottom:5px;color:var(--dim);font-size:11px}
 .locked code{opacity:.65}
-.tool.sealed{background:#E8EBED;border-left-color:var(--dim)}
-.tool.sealed code{text-decoration:line-through;color:var(--dim)}
-.tool.sealed p{color:var(--dim)}
-.kind.sealed{color:var(--dim);border-color:var(--dim)}
 #truth{margin-top:12px;padding:8px 10px;border:1px solid var(--rule);background:var(--panel);
   font-size:11px;line-height:1.5;color:var(--dim)}
 #truth b{color:var(--ink)}
@@ -154,22 +150,10 @@ button.danger:hover{background:var(--red);color:#fff}
     <h2>Agent capabilities <span id="toolcount"></span></h2>
     <div id="recon">
       <div class="fig"><b id="rperm">0</b><span id="rpermlabel">permitted</span></div>
-      <div class="fig"><b id="rseal">0</b><span>sealed</span></div>
       <div class="fig"><b id="rreg">?</b><span>registered<br>per browser</span></div>
     </div>
-    <p id="sealnote" hidden>ChatGPT's browser exposes registerTool and getTools but nothing that removes a tool,
-    so tools that fall out of severity stay registered — the page refuses the call instead.</p>
-    <p id="sealhint" hidden>Nothing is sealed yet because the red-severity tools have not been reached —
-    raise severity to red, then lower it.</p>
-    <p id="plainnote" hidden>Nothing sealed because this browser has no WebMCP — no tool was ever registered,
-    so there is nothing to seal; the mechanism runs in ChatGPT's browser or Chrome 149+ with
-    chrome://flags/#enable-webmcp-testing.</p>
     <p id="authority"></p>
     <div id="tray"></div>
-    <div id="sealedwrap" hidden>
-      <h2 style="margin-top:18px">Sealed <span>registered, refusing</span></h2>
-      <div id="sealed"></div>
-    </div>
     <h2 style="margin-top:18px">Not yet mounted <span>unlocks with severity</span></h2>
     <div id="locked"></div>
     <div id="truth"></div>
@@ -235,8 +219,7 @@ const visitedSev = new Set();          // severities seen this session, for the 
 
 /* ───────── motion: exactly three animated moments, nothing else ───────── */
 const canAnimate = () => !!window.Motion && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-let trayShown = null, sealedShown = null;  // tool names displayed last render; null until first paint
+let trayShown = null;                      // tool names displayed last render; null until first paint
 const reconVals = {};                      // id -> {val, anim} for the stats tick
 function reconTick(id, next){
   const el = document.getElementById(id);
@@ -429,7 +412,8 @@ const ALL = [
 const mounted = () => ALL.filter(t => t.states.includes(state.sev));
 
 /* ───────── the point: the tool surface follows the severity ───────── */
-const registered = new Set();          // names this page has handed to the browser
+const registered = new Set();          // names actually registered with the browser right now
+const controllers = new Map();         // tool name -> AbortController; aborting unregisters
 state.browserTools = [];               // what the browser says it actually has
 
 function spec(t){
@@ -437,12 +421,6 @@ function spec(t){
     annotations:{ readOnlyHint: t.at === "r", destructiveHint: t.at === "d" },
     execute: async args => {
       fire(t.name);
-      if(!t.states.includes(state.sev)){          // sealed: registered, but not permitted now
-        log("agent", `${t.name} refused — sealed at ${state.sev}`);
-        return err(`${t.name} is sealed at severity ${state.sev}. It operates at: ${t.states.join(", ")}. ` +
-          `Ask the on-call human with request_escalation — this browser has no way to unregister a tool, ` +
-          `so the console refuses the call instead.`);
-      }
       log("agent", `called ${t.name}`);
       return t.run(args || {});
     } };
@@ -451,20 +429,31 @@ function spec(t){
 async function syncTools(){
   const ctx = document.modelContext ?? navigator.modelContext;
   if(!ctx) return;
-  // Add-only. ChatGPT's browser exposes registerTool/getTools/executeTool and nothing that removes,
-  // and re-registering an existing name throws — so tools mount once and are sealed thereafter.
+  // The WebMCP draft dropped unregisterTool (2026-04-23) in favour of
+  // registerTool(tool, { signal }): aborting the signal removes the tool.
+  // Verified in ChatGPT's browser via probe.html — the surface truly grows and shrinks.
   for(const t of mounted()){
     if(registered.has(t.name)) continue;
-    try{ await ctx.registerTool(spec(t)); registered.add(t.name); }
+    const ac = new AbortController();
+    try{
+      await ctx.registerTool(spec(t), { signal: ac.signal });
+      controllers.set(t.name, ac); registered.add(t.name);
+    }
     catch(e){ log("system", `registerTool(${t.name}) failed: ${e?.message || "no message"}`); }
+  }
+  const permitted = new Set(mounted().map(t => t.name));
+  for(const name of [...registered]){
+    if(permitted.has(name)) continue;
+    controllers.get(name)?.abort();
+    controllers.delete(name); registered.delete(name);
   }
   try{
     const got = await ctx.getTools?.();
     state.browserTools = (got || []).map(x => x?.name ?? x).filter(Boolean);
   }catch{ state.browserTools = null; }
   state.syncMode = typeof ctx.getTools === "function"
-    ? "registerTool() + getTools() — add-only surface, verified against the browser"
-    : "registerTool() only — cannot read back the surface";
+    ? "registerTool({signal}) + getTools() — aborting unregisters, verified against the browser"
+    : "registerTool({signal}) only — cannot read back the surface";
   render();
 }
 
@@ -508,7 +497,7 @@ function render(){
   guide.textContent = {
     green:  "Click YELLOW. Four investigation tools mount in the right column.",
     yellow: "Click RED. The agent gets tools that can change production.",
-    red:    "Click BLUE. Watch the destructive tools seal instead of vanishing.",
+    red:    "Click BLUE. Watch the destructive tools unmount — the agent loses them for real.",
     blue:   "Reload to start over.",
   }[state.sev];
   document.getElementById("reqnote").textContent = state.requested
@@ -521,55 +510,38 @@ function render(){
     ? `At ${state.sev} the agent can change ${writes} thing(s) — each one stops for your approval.`
     : `At ${state.sev} the agent can look, and ask. It cannot change anything.`;
 
-  document.getElementById("tray").innerHTML = m.map(t => `
+  // animate only cards entering or leaving the tray; first paint and reduced motion jump straight to final state
+  const tray = document.getElementById("tray");
+  const trayNow = new Set(m.map(t => t.name));
+  const ghosts = trayShown && canAnimate()
+    ? [...tray.querySelectorAll(".tool")].filter(el => !trayNow.has(el.dataset.tool)).map(el => el.cloneNode(true))
+    : [];
+  tray.innerHTML = m.map(t => `
     <div class="tool ${t.at}" data-tool="${t.name}">
       <span class="kind ${t.at}">${AT[t.at]}</span><code>${t.name}</code>
       <p>${t.description.split(".")[0]}.</p>
     </div>`).join("");
-
-  const sealed = ALL.filter(t => registered.has(t.name) && !t.states.includes(state.sev));
-  document.getElementById("sealedwrap").hidden = !sealed.length;
-  document.getElementById("sealed").innerHTML = sealed.map(t => `
-    <div class="tool sealed" data-tool="${t.name}">
-      <span class="kind sealed">sealed</span><code>${t.name}</code>
-      <p>Still registered — the browser has no way to remove it. Refused at ${state.sev} — this tool operates only at ${t.states.join(" or ")}.</p>
-    </div>`).join("");
-
-  // animate only cards that are new to their container; first paint and reduced motion jump straight to final state
-  const trayNow = new Set(m.map(t => t.name));
   if(trayShown && canAnimate()){
-    const fresh = [...document.querySelectorAll("#tray .tool")].filter(el => !trayShown.has(el.dataset.tool));
+    const fresh = [...tray.querySelectorAll(".tool")].filter(el => !trayShown.has(el.dataset.tool));
     if(fresh.length) Motion.animate(fresh, { opacity: [0, 1], x: [12, 0] },
       { duration: .26, ease: [.2, .9, .2, 1], delay: Motion.stagger(.04) });
   }
-  trayShown = trayNow;
-  const sealedNow = new Set(sealed.map(t => t.name));
-  if(sealedShown && canAnimate()){
-    for(const el of [...document.querySelectorAll("#sealed .tool")].filter(x => !sealedShown.has(x.dataset.tool))){
-      const at = ALL.find(t => t.name === el.dataset.tool)?.at;
-      Motion.animate(el, {
-        backgroundColor: [cssVar("--panel"), "#E8EBED"],
-        borderLeftColor: [at === "d" ? cssVar("--red") : at === "w" ? cssVar("--amber") : cssVar("--rule"), cssVar("--dim")],
-        filter: ["saturate(1)", "saturate(0)"],
-      }, { duration: .45, ease: "easeOut" });
-    }
+  for(const g of ghosts){                 // unmounted for real — fade the old card out
+    tray.appendChild(g);
+    Motion.animate(g, { opacity: [1, 0], x: [0, 12] }, { duration: .26, ease: "easeIn" });
+    setTimeout(() => g.remove(), 300);
   }
-  sealedShown = sealedNow;
+  trayShown = trayNow;
 
-  const never = ALL.filter(t => !registered.has(t.name) && !t.states.includes(state.sev));
-  document.getElementById("locked").innerHTML = never.length
-    ? never.map(t => `<div class="locked"><code>${t.name}</code> — mounts at ${t.states[0]}</div>`).join("")
+  const locked = ALL.filter(t => !t.states.includes(state.sev));
+  document.getElementById("locked").innerHTML = locked.length
+    ? locked.map(t => `<div class="locked"><code>${t.name}</code> — mounts at ${t.states[0]}</div>`).join("")
     : `<p class="tag">Nothing left to mount.</p>`;
 
   const bt = state.browserTools;
   reconTick("rperm", m.length);
   document.getElementById("rpermlabel").textContent = `permitted at ${state.sev}`;
-  reconTick("rseal", sealed.length);
   reconTick("rreg", bt === null ? "?" : bt.length);
-  document.getElementById("sealnote").hidden = !sealed.length;
-  document.getElementById("sealhint").hidden = sealed.length > 0 || visitedSev.has("red");
-  document.getElementById("plainnote").hidden =
-    !visitedSev.has("red") || !!(document.modelContext ?? navigator.modelContext);
   document.getElementById("truth").hidden = state.syncMode === "—";
   document.getElementById("truth").textContent = state.syncMode;
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
