@@ -56,9 +56,13 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:400 11px/1.4 var(--mono);color:var(--dim)}
-#authority,#reqnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
-#reqnote{margin:0}
-#reqnote:empty{display:none}
+#authority{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+
+#reqnote{margin:0 0 14px;padding:12px 14px;background:#EAF1FA;border:1px solid var(--blue);border-left:4px solid var(--blue)}
+#reqnote .rq-kicker{display:block;font:700 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);margin-bottom:7px}
+#reqnote .rq-to{font:700 17px/1 var(--disp);letter-spacing:-.01em;text-transform:uppercase;margin-bottom:6px}
+#reqnote .rq-why{margin:0 0 8px;font-size:12px;line-height:1.55;color:var(--ink)}
+#reqnote .rq-foot{margin:0;font-size:11px;line-height:1.5;color:var(--dim)}
 
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
@@ -140,7 +144,12 @@ button.danger:hover{background:var(--red);color:#fff}
     <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
     <div class="sevbtns" id="sevbtns"></div>
     <p id="sevguide" hidden></p>
-    <div id="reqnote"></div>
+    <div id="reqnote" hidden>
+      <b class="rq-kicker">agent is requesting</b>
+      <div class="rq-to" id="reqto"></div>
+      <p class="rq-why" id="reqwhy"></p>
+      <p class="rq-foot">Only you can grant this — the agent cannot press the severity buttons. It can only ask.</p>
+    </div>
 
     <h2 style="margin-top:20px">Timeline <span>human + agent</span></h2>
     <ul id="tl"></ul>
@@ -500,8 +509,12 @@ function render(){
     red:    "Click BLUE. Watch the destructive tools unmount — the agent loses them for real.",
     blue:   "Reload to start over.",
   }[state.sev];
-  document.getElementById("reqnote").textContent = state.requested
-    ? `agent is asking for ${state.requested.to}: ${state.requested.reason}` : "";
+  const rq = document.getElementById("reqnote");
+  rq.hidden = !state.requested;
+  if(state.requested){
+    document.getElementById("reqto").textContent = `severity ${state.requested.to}`;
+    document.getElementById("reqwhy").textContent = `“${state.requested.reason}”`;
+  }
 
   const m = mounted();
   document.getElementById("toolcount").textContent = `${m.length} mounted`;
