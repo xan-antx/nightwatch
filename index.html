@@ -148,12 +148,12 @@ button.danger:hover{background:var(--red);color:#fff}
 
   <div class="col">
     <h2>Agent capabilities <span id="toolcount"></span></h2>
-    <div id="recon">
+    <div id="recon" aria-live="polite">
       <div class="fig"><b id="rperm">0</b><span id="rpermlabel">permitted</span></div>
       <div class="fig"><b id="rreg">?</b><span>registered<br>per browser</span></div>
     </div>
     <p id="authority"></p>
-    <div id="tray"></div>
+    <div id="tray" aria-live="polite"></div>
     <h2 style="margin-top:18px">Not yet mounted <span>unlocks with severity</span></h2>
     <div id="locked"></div>
     <div id="truth"></div>
@@ -510,26 +510,31 @@ function render(){
     ? `At ${state.sev} the agent can change ${writes} thing(s) — each one stops for your approval.`
     : `At ${state.sev} the agent can look, and ask. It cannot change anything.`;
 
-  // animate only cards entering or leaving the tray; first paint and reduced motion jump straight to final state
+  // rebuild the tray only when the tool set actually changed — it is an aria-live
+  // region, and rewriting identical content would re-announce on every render
   const tray = document.getElementById("tray");
   const trayNow = new Set(m.map(t => t.name));
-  const ghosts = trayShown && canAnimate()
-    ? [...tray.querySelectorAll(".tool")].filter(el => !trayNow.has(el.dataset.tool)).map(el => el.cloneNode(true))
-    : [];
-  tray.innerHTML = m.map(t => `
-    <div class="tool ${t.at}" data-tool="${t.name}">
-      <span class="kind ${t.at}">${AT[t.at]}</span><code>${t.name}</code>
-      <p>${t.description.split(".")[0]}.</p>
-    </div>`).join("");
-  if(trayShown && canAnimate()){
-    const fresh = [...tray.querySelectorAll(".tool")].filter(el => !trayShown.has(el.dataset.tool));
-    if(fresh.length) Motion.animate(fresh, { opacity: [0, 1], x: [12, 0] },
-      { duration: .26, ease: [.2, .9, .2, 1], delay: Motion.stagger(.04) });
-  }
-  for(const g of ghosts){                 // unmounted for real — fade the old card out
-    tray.appendChild(g);
-    Motion.animate(g, { opacity: [1, 0], x: [0, 12] }, { duration: .26, ease: "easeIn" });
-    setTimeout(() => g.remove(), 300);
+  const sameTray = trayShown && trayShown.size === trayNow.size && [...trayNow].every(n => trayShown.has(n));
+  if(!sameTray){
+    // animate only cards entering or leaving; first paint and reduced motion jump straight to final state
+    const ghosts = trayShown && canAnimate()
+      ? [...tray.querySelectorAll(".tool")].filter(el => !trayNow.has(el.dataset.tool)).map(el => el.cloneNode(true))
+      : [];
+    tray.innerHTML = m.map(t => `
+      <div class="tool ${t.at}" data-tool="${t.name}">
+        <span class="kind ${t.at}">${AT[t.at]}</span><code>${t.name}</code>
+        <p>${t.description.split(".")[0]}.</p>
+      </div>`).join("");
+    if(trayShown && canAnimate()){
+      const fresh = [...tray.querySelectorAll(".tool")].filter(el => !trayShown.has(el.dataset.tool));
+      if(fresh.length) Motion.animate(fresh, { opacity: [0, 1], x: [12, 0] },
+        { duration: .26, ease: [.2, .9, .2, 1], delay: Motion.stagger(.04) });
+    }
+    for(const g of ghosts){               // unmounted for real — fade the old card out
+      tray.appendChild(g);
+      Motion.animate(g, { opacity: [1, 0], x: [0, 12] }, { duration: .26, ease: "easeIn" });
+      setTimeout(() => g.remove(), 300);
+    }
   }
   trayShown = trayNow;
 
@@ -540,7 +545,8 @@ function render(){
 
   const bt = state.browserTools;
   reconTick("rperm", m.length);
-  document.getElementById("rpermlabel").textContent = `permitted at ${state.sev}`;
+  const permLabel = document.getElementById("rpermlabel"), permText = `permitted at ${state.sev}`;
+  if(permLabel.textContent !== permText) permLabel.textContent = permText;  // #recon is aria-live
   reconTick("rreg", bt === null ? "?" : bt.length);
   document.getElementById("truth").hidden = state.syncMode === "—";
   document.getElementById("truth").textContent = state.syncMode;
