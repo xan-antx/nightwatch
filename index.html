@@ -56,7 +56,7 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:400 11px/1.4 var(--mono);color:var(--dim)}
-#authority{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#authority,#nowebmcp{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 
 #reqnote{margin:0 0 14px;padding:12px 14px;background:#EAF1FA;border:1px solid var(--blue);border-left:4px solid var(--blue)}
 #reqnote .rq-kicker{display:block;font:700 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);margin-bottom:7px}
@@ -161,6 +161,9 @@ button.danger:hover{background:var(--red);color:#fff}
       <div class="fig"><b id="rperm">0</b><span id="rpermlabel">permitted</span></div>
       <div class="fig"><b id="rreg">?</b><span>registered<br>per browser</span></div>
     </div>
+    <p id="nowebmcp" hidden>0 registered because this browser has no WebMCP, so no tool was ever registered —
+    open in ChatGPT's built-in browser, or Chrome 149+ with chrome://flags/#enable-webmcp-testing,
+    to see the real tool surface.</p>
     <p id="authority"></p>
     <div id="tray" aria-live="polite"></div>
     <h2 style="margin-top:18px">Not yet mounted <span>unlocks with severity</span></h2>
@@ -576,6 +579,7 @@ if(ctx){
 }else{
   document.getElementById("conn").textContent = "no webmcp in this browser";
   document.getElementById("webmcpnote").hidden = false;
+  document.getElementById("nowebmcp").hidden = false;
   render();
 }
 
