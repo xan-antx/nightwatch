@@ -54,13 +54,15 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:500 9px/1.4 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
-#sealnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#sealnote,#sealhint{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
 #alertbox b{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:5px}
 
-.sevbtns{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.sevbtns{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 8px;align-items:center}
+.sevflow{color:var(--dim);font-size:11px;user-select:none}
+#sevguide{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 button{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;
   border:1.5px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
 button:hover{background:var(--ink);color:var(--panel)}
@@ -139,6 +141,7 @@ button.danger:hover{background:var(--red);color:#fff}
 
     <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
     <div class="sevbtns" id="sevbtns"></div>
+    <p id="sevguide" hidden></p>
     <div id="reqnote" class="tag"></div>
 
     <h2 style="margin-top:20px">Timeline <span>human + agent</span></h2>
@@ -154,6 +157,8 @@ button.danger:hover{background:var(--red);color:#fff}
     </div>
     <p id="sealnote" hidden>ChatGPT's browser exposes registerTool and getTools but nothing that removes a tool,
     so tools that fall out of severity stay registered — the page refuses the call instead.</p>
+    <p id="sealhint" hidden>Nothing is sealed yet because the red-severity tools have not been reached —
+    raise severity to red, then lower it.</p>
     <p class="tag" id="authority" style="margin:0 0 10px;line-height:1.6"></p>
     <div id="tray"></div>
     <div id="sealedwrap" hidden>
@@ -173,6 +178,9 @@ button.danger:hover{background:var(--red);color:#fff}
   <div class="row"><button id="mno">Deny</button><button id="myes" class="danger">Approve</button></div>
 </div></div>
 
+<!-- Motion v13 (motion.dev) — vendored UMD build from node_modules/motion/dist/motion.js.
+     Exposes window.Motion: const { animate, press, hover } = Motion; -->
+<script src="./motion.min.js"></script>
 <script>
 "use strict";
 
@@ -218,6 +226,7 @@ const state = {
   requested:null, timeline:[], lastFired:null, syncMode:"—",
 };
 const svc = id => state.svcs.find(s => s.id === id);
+const visitedSev = new Set();          // severities seen this session, for the guided path
 
 function log(by, text){ state.timeline.unshift({t:clock(), by, text}); render(); }
 const clock = () => new Date().toTimeString().slice(0,8);
@@ -453,14 +462,28 @@ function render(){
       <div class="num ${s.err > 1 ? "bad" : ""}">${s.err.toFixed(2)}%</div>
     </div>`).join("");
 
+  visitedSev.add(state.sev);
   const bar = document.getElementById("sevbtns"); bar.innerHTML = "";
-  SEV.forEach(s => {
+  SEV.forEach((s, i) => {
+    if(i){
+      const sep = document.createElement("span");
+      sep.className = "sevflow"; sep.textContent = "→"; sep.setAttribute("aria-hidden", "true");
+      bar.appendChild(sep);
+    }
     const b = document.createElement("button");
-    b.textContent = s; b.disabled = s === state.sev;
+    b.textContent = (visitedSev.has(s) ? "✓ " : "") + s; b.disabled = s === state.sev;
     if(state.requested?.to === s) b.classList.add("armed");
     b.onclick = () => setSeverity(s, "human");
     bar.appendChild(b);
   });
+  const guide = document.getElementById("sevguide");
+  guide.hidden = visitedSev.size === SEV.length;
+  guide.textContent = {
+    green:  "Click YELLOW. Four investigation tools mount in the right column.",
+    yellow: "Click RED. The agent gets tools that can change production.",
+    red:    "Click BLUE. Watch the destructive tools seal instead of vanishing.",
+    blue:   "Reload to start over.",
+  }[state.sev];
   document.getElementById("reqnote").textContent = state.requested
     ? `agent is asking for ${state.requested.to}: ${state.requested.reason}` : "";
 
@@ -496,6 +519,7 @@ function render(){
   document.getElementById("rseal").textContent = sealed.length;
   document.getElementById("rreg").textContent = bt === null ? "?" : bt.length;
   document.getElementById("sealnote").hidden = !sealed.length;
+  document.getElementById("sealhint").hidden = sealed.length > 0 || ALL.every(t => registered.has(t.name));
   document.getElementById("truth").hidden = state.syncMode === "—";
   document.getElementById("truth").textContent = state.syncMode;
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
