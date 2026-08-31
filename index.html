@@ -508,7 +508,7 @@ function render(){
   document.getElementById("sealed").innerHTML = sealed.map(t => `
     <div class="tool sealed" data-tool="${t.name}">
       <span class="kind sealed">sealed</span><code>${t.name}</code>
-      <p>Still registered — the browser has no way to remove it. Calls are refused until severity is ${t.states.join(" or ")}.</p>
+      <p>Still registered — the browser has no way to remove it. Refused at ${state.sev} — this tool operates only at ${t.states.join(" or ")}.</p>
     </div>`).join("");
 
   const never = ALL.filter(t => !registered.has(t.name) && !t.states.includes(state.sev));
