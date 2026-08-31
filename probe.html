@@ -66,6 +66,21 @@ const no  = t => say("no   " + t, "n");
       yes("late registration did not throw — now ask the agent to call probe_late"); }
     catch(e){ no("late registration threw: " + e.message); }
   }, 4000);
+
+  // 5. does aborting a registration's AbortSignal unregister the tool?
+  const ac = new AbortController();
+  try{
+    await ctx.registerTool(mk("probe_abort", "Abort test. Ask the agent to list tools before and after."), { signal: ac.signal });
+    yes("registerTool accepted an options object with a signal");
+    setTimeout(async () => {
+      ac.abort();
+      const after = await ctx.getTools?.();
+      say("after abort, getTools reports: " + (after || []).map(t => t?.name ?? t).join(", "));
+      say((after || []).some(t => (t?.name ?? t) === "probe_abort")
+        ? "STILL THERE — abort did not unregister"
+        : "GONE — AbortSignal unregistration works");
+    }, 5000);
+  }catch(e){ no("registerTool with signal threw: " + (e?.message || "no message")); }
 })();
 </script>
 </body>
