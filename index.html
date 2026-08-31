@@ -54,7 +54,7 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:500 9px/1.4 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
-#sealnote,#sealhint{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#sealnote,#sealhint,#plainnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
@@ -159,6 +159,9 @@ button.danger:hover{background:var(--red);color:#fff}
     so tools that fall out of severity stay registered — the page refuses the call instead.</p>
     <p id="sealhint" hidden>Nothing is sealed yet because the red-severity tools have not been reached —
     raise severity to red, then lower it.</p>
+    <p id="plainnote" hidden>Nothing sealed because this browser has no WebMCP — no tool was ever registered,
+    so there is nothing to seal; the mechanism runs in ChatGPT's browser or Chrome 149+ with
+    chrome://flags/#enable-webmcp-testing.</p>
     <p class="tag" id="authority" style="margin:0 0 10px;line-height:1.6"></p>
     <div id="tray"></div>
     <div id="sealedwrap" hidden>
@@ -519,7 +522,9 @@ function render(){
   document.getElementById("rseal").textContent = sealed.length;
   document.getElementById("rreg").textContent = bt === null ? "?" : bt.length;
   document.getElementById("sealnote").hidden = !sealed.length;
-  document.getElementById("sealhint").hidden = sealed.length > 0 || ALL.every(t => registered.has(t.name));
+  document.getElementById("sealhint").hidden = sealed.length > 0 || visitedSev.has("red");
+  document.getElementById("plainnote").hidden =
+    !visitedSev.has("red") || !!(document.modelContext ?? navigator.modelContext);
   document.getElementById("truth").hidden = state.syncMode === "—";
   document.getElementById("truth").textContent = state.syncMode;
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
