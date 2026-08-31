@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --steel:#D7DCE0; --panel:#FBFCFD; --ink:#10171C; --dim:#5C6B76; --rule:#AEBAC3;
+  --steel:#D7DCE0; --panel:#FBFCFD; --ink:#10171C; --dim:#4E5B65; --rule:#AEBAC3;
   --green:#2F7D4F; --amber:#B87309; --red:#BE3428; --blue:#2C5FA8;
   --sev:var(--green);
   --mono:"JetBrains Mono",ui-monospace,monospace;
@@ -41,6 +41,8 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 .svc b{font-weight:700}
 .svc .meta{color:var(--dim);font-size:11px}
 .svc .num{font-weight:700;text-align:right;min-width:74px}
+.svc .st{font:700 10px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+.svc .st.ok{font-weight:400;color:var(--dim)}
 .svc .num.bad{color:var(--red)}
 
 #intro{margin:0 0 16px;padding:0 0 12px;border-bottom:1px solid var(--rule)}
@@ -53,8 +55,10 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig{flex:1;padding:10px 8px;text-align:center}
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
-#recon .fig span{font:500 9px/1.4 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
-#sealnote,#sealhint,#plainnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#recon .fig span{font:400 11px/1.4 var(--mono);color:var(--dim)}
+#sealnote,#sealhint,#plainnote,#authority,#reqnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#reqnote{margin:0}
+#reqnote:empty{display:none}
 
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
@@ -67,6 +71,7 @@ button{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase
   border:1.5px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
 button:hover{background:var(--ink);color:var(--panel)}
 button[disabled]{opacity:.35;cursor:not-allowed;background:var(--panel);color:var(--ink)}
+button.current[disabled]{opacity:1;cursor:default;background:var(--ink);color:var(--panel)}
 button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 button.armed{border-color:var(--sev);color:var(--sev);box-shadow:0 0 0 3px color-mix(in srgb,var(--sev) 20%,transparent)}
 button.danger{border-color:var(--red);color:var(--red)}
@@ -142,7 +147,7 @@ button.danger:hover{background:var(--red);color:#fff}
     <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
     <div class="sevbtns" id="sevbtns"></div>
     <p id="sevguide" hidden></p>
-    <div id="reqnote" class="tag"></div>
+    <div id="reqnote"></div>
 
     <h2 style="margin-top:20px">Timeline <span>human + agent</span></h2>
     <ul id="tl"></ul>
@@ -162,7 +167,7 @@ button.danger:hover{background:var(--red);color:#fff}
     <p id="plainnote" hidden>Nothing sealed because this browser has no WebMCP — no tool was ever registered,
     so there is nothing to seal; the mechanism runs in ChatGPT's browser or Chrome 149+ with
     chrome://flags/#enable-webmcp-testing.</p>
-    <p class="tag" id="authority" style="margin:0 0 10px;line-height:1.6"></p>
+    <p id="authority"></p>
     <div id="tray"></div>
     <div id="sealedwrap" hidden>
       <h2 style="margin-top:18px">Sealed <span>registered, refusing</span></h2>
@@ -460,7 +465,8 @@ function render(){
   document.getElementById("svcmeta").textContent = state.drained.length ? `${state.drained.join(", ")} drained` : "";
   document.getElementById("svcs").innerHTML = state.svcs.map(s => `
     <div class="svc ${state.drained.includes(s.region) ? "drained" : s.status}">
-      <div><b>${s.id}</b> <span class="meta">${s.version} · ${s.region} · ${s.owner}</span></div>
+      <div><b>${s.id}</b> <span class="st ${state.drained.includes(s.region) ? "drained" : s.status}">${state.drained.includes(s.region) ? "drained" : s.status}</span>
+        <span class="meta">${s.version} · ${s.region} · ${s.owner}</span></div>
       <div class="num">${s.p99}ms</div>
       <div class="num ${s.err > 1 ? "bad" : ""}">${s.err.toFixed(2)}%</div>
     </div>`).join("");
@@ -475,6 +481,7 @@ function render(){
     }
     const b = document.createElement("button");
     b.textContent = (visitedSev.has(s) ? "✓ " : "") + s; b.disabled = s === state.sev;
+    if(s === state.sev) b.classList.add("current");
     if(state.requested?.to === s) b.classList.add("armed");
     b.onclick = () => setSeverity(s, "human");
     bar.appendChild(b);
