@@ -33,6 +33,9 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;align-items:st
 h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
   margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between}
 
+#svchead{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:0 12px 4px}
+#svchead span{font:500 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);min-width:74px;text-align:right}
+#svchead span:first-child{min-width:0}
 .svc{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--green);
   padding:9px 11px;margin-bottom:6px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center}
 .svc.degraded{border-left-color:var(--amber)}
@@ -56,7 +59,7 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:400 11px/1.4 var(--mono);color:var(--dim)}
-#authority,#nowebmcp{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#authority,#nowebmcp,#readout{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 
 #reqnote{margin:0 0 14px;padding:12px 14px;background:#EAF1FA;border:1px solid var(--blue);border-left:4px solid var(--blue)}
 #reqnote .rq-kicker{display:block;font:700 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);margin-bottom:7px}
@@ -120,7 +123,7 @@ button.danger:hover{background:var(--red);color:#fff}
 
 <header>
   <h1>Nightwatch</h1>
-  <span class="tag">incident console · shift 03:00–11:00</span>
+  <span class="tag">incident console · shift 03:00–11:00 · @mira on call</span>
   <span id="conn" class="tag">no agent</span>
   <span id="sevpill">green</span>
 </header>
@@ -129,9 +132,10 @@ button.danger:hover{background:var(--red);color:#fff}
   <div class="col">
     <div id="intro">
       <h2>What you're looking at</h2>
-      <p>Nightwatch is an incident console for a small production estate, watched by an AI agent.
+      <p>Nightwatch is an incident console for a small group of production services, watched by an AI agent.
       The right-hand column is the agent's tool surface — <b>exactly what it is allowed to call right now</b>.
-      That set follows incident severity, and only the human on call can change severity. The agent can only ask.</p>
+      That set follows incident severity, and only the human on call can change severity.
+      The agent can only ask you to change it.</p>
       <p id="webmcpnote" hidden>This page only comes alive in a browser that supports WebMCP —
       ChatGPT's built-in browser, or Chrome 149+ with chrome://flags/#enable-webmcp-testing.</p>
     </div>
@@ -139,6 +143,7 @@ button.danger:hover{background:var(--red);color:#fff}
     <div id="alertbox" class="none"><b>alerts</b>Nothing firing. All services within SLO.</div>
 
     <h2>Services <span id="svcmeta"></span></h2>
+    <div id="svchead"><span></span><span>p99</span><span>error rate</span></div>
     <div id="svcs"></div>
 
     <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
@@ -157,6 +162,8 @@ button.danger:hover{background:var(--red);color:#fff}
 
   <div class="col">
     <h2>Agent capabilities <span id="toolcount"></span></h2>
+    <p id="readout">This column shows what the agent can call — a readout, not buttons.
+    Only the severity buttons and approval cards are yours.</p>
     <div id="recon" aria-live="polite">
       <div class="fig"><b id="rperm">0</b><span id="rpermlabel">permitted</span></div>
       <div class="fig"><b id="rreg">?</b><span>registered<br>per browser</span></div>
@@ -260,6 +267,8 @@ function setSeverity(next, by){
     Object.assign(svc("checkout-api"), {status:"failing", p99:1840, err:14.2});
     Object.assign(svc("payments-worker"), {status:"degraded", p99:900, err:2.1});
     state.lastFired = ALERT;
+    state.timeline.unshift({ t:ALERT.fired, by:"system",
+      text:`${ALERT.id} fired — ${ALERT.service} error rate 14.2% crossed SLO 0.5%` });
   }
   log(by, `severity ${prev} → ${next}`);
   syncTools();
@@ -477,7 +486,7 @@ function render(){
   document.getElementById("sevpill").textContent = state.sev + (state.maintenance ? " · maintenance" : "");
 
   const a = document.getElementById("alertbox");
-  if(state.lastFired){ a.className = ""; a.innerHTML = `<b>${state.lastFired.id} · fired ${state.lastFired.fired}</b>${state.lastFired.text}`; }
+  if(state.lastFired){ a.className = ""; a.innerHTML = `<b>critical alert · ${state.lastFired.id} · fired ${state.lastFired.fired}</b>${state.lastFired.text}`; }
   else { a.className = "none"; a.innerHTML = `<b>alerts</b>Nothing firing. All services within SLO.`; }
 
   document.getElementById("svcmeta").textContent = state.drained.length ? `${state.drained.join(", ")} drained` : "";
