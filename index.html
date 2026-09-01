@@ -288,13 +288,15 @@ const jitter = (a, b) => a + Math.random() * (b - a);
 let simSec = 3 * 3600;                      // simulated clock starts at 03:00
 const series = [];                          // seeded: one point per 30s of simulated time
 for(let i = 0; i < 36; i++){
-  series.push({ t: fmtSim(simSec), p99: Math.round(jitter(85, 95)), err: +jitter(0.005, 0.045).toFixed(3) });
+  series.push(i >= 14                       // the 03:04 deploy goes bad at 03:07 — the seed carries the spike
+    ? { t: fmtSim(simSec), p99: Math.round(1840 * jitter(.72, 1.22)), err: +(14.2 * jitter(.6, 1.3)).toFixed(2) }
+    : { t: fmtSim(simSec), p99: Math.round(jitter(85, 95)), err: +jitter(0.005, 0.045).toFixed(3) });
   simSec += SIM_STEP;
 }
 series[8].deploy = true;                    // 03:04 — the checkout-api config deploy
 
-const live = { p99: 90, err: 0.02 };        // eased view of the console's truth
-let alertStamped = false;
+const live = { p99: 1840, err: 14.2 };      // eased view of the console's truth — degraded from the start
+let alertStamped = true;                    // the 03:07 spike is already in the seed
 function appendPoint(){
   const c = svc("checkout-api");
   for(const k of ["p99", "err"]){           // fast attack, slow decay — recovery is a curve, not a step
@@ -412,19 +414,23 @@ function reconTick(id, next){
 function log(by, text){ state.timeline.unshift({t:clock(), by, text}); render(); }
 const clock = () => new Date().toTimeString().slice(0,8);
 
+/* ───────── the incident: a fact in the world, not a severity ───────── */
+function igniteIncident(){
+  Object.assign(svc("checkout-api"), {status:"failing", p99:1840, err:14.2});
+  Object.assign(svc("payments-worker"), {status:"degraded", p99:900, err:2.1});
+  state.lastFired = ALERT;
+  state.timeline.unshift({ t:ALERT.fired, by:"system",
+    text:`${ALERT.id} fired — ${ALERT.service} error rate 14.2% crossed SLO 0.5%` });
+}
+
 /* ───────── severity: humans only ───────── */
 function setSeverity(next, by){
   if(!SEV.includes(next) || next === state.sev) return;
   const prev = state.sev;
   state.sev = next; state.requested = null;
-  if(next === "yellow" && prev === "green"){        // the incident begins
-    Object.assign(svc("checkout-api"), {status:"failing", p99:1840, err:14.2});
-    Object.assign(svc("payments-worker"), {status:"degraded", p99:900, err:2.1});
-    state.lastFired = ALERT;
-    state.timeline.unshift({ t:ALERT.fired, by:"system",
-      text:`${ALERT.id} fired — ${ALERT.service} error rate 14.2% crossed SLO 0.5%` });
-  }
-  if(next === "green"){                             // green means all clear — nothing may still be failing
+  if(next === "yellow" && prev === "green" && svc("checkout-api").status === "ok")
+    igniteIncident();                               // repeat takes: a cleared incident re-fires on triage
+  if(next === "green"){                             // green reset — the only other health change severity makes
     Object.assign(svc("checkout-api"), {status:"ok", p99:88, err:0.02});
     Object.assign(svc("payments-worker"), {status:"ok", p99:120, err:0.01});
     state.lastFired = null;
@@ -673,7 +679,9 @@ function render(){
   const guide = document.getElementById("sevguide");
   guide.hidden = visitedSev.size === SEV.length;
   guide.textContent = {
-    green:  "Click YELLOW. Four investigation tools mount in the right column.",
+    green:  state.lastFired
+      ? "An alert is firing. Click YELLOW to triage it — four investigation tools mount in the right column."
+      : "Click YELLOW. Four investigation tools mount in the right column.",
     yellow: "Click RED. The agent gets tools that can change production.",
     red:    "Click BLUE. Watch the destructive tools unmount — the agent loses them for real.",
     blue:   "Reload to start over.",
@@ -742,6 +750,8 @@ function render(){
 }
 
 /* ───────── boot ───────── */
+igniteIncident();                          // the alert is already firing when the page opens — green just
+                                           // means nobody has triaged it yet
 const ctx = document.modelContext ?? navigator.modelContext;
 if(ctx){
   document.getElementById("conn").textContent = "agent connected";
