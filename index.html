@@ -59,7 +59,8 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #recon .fig+.fig{border-left:1px solid var(--rule)}
 #recon .fig b{display:block;font:700 26px/1.1 var(--disp);letter-spacing:-.01em}
 #recon .fig span{font:400 11px/1.4 var(--mono);color:var(--dim)}
-#authority,#nowebmcp,#readout{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#authority,#nowebmcp,#readout,#bluenote,#chartnote{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
+#chartnote{margin:4px 0 0}
 
 #reqnote{margin:0 0 14px;padding:12px 14px;background:#EAF1FA;border:1px solid var(--blue);border-left:4px solid var(--blue)}
 #reqnote .rq-kicker{display:block;font:700 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);margin-bottom:7px}
@@ -169,6 +170,8 @@ button.danger:hover{background:var(--red);color:#fff}
         <svg id="chart-err" role="img"></svg>
       </figure>
     </div>
+    <p id="chartnote">The lines follow checkout-api's live numbers — they recover only when a fix is
+    actually applied. Severity alone does not change them.</p>
 
     <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
     <div class="sevbtns" id="sevbtns"></div>
@@ -179,6 +182,8 @@ button.danger:hover{background:var(--red);color:#fff}
       <p class="rq-why" id="reqwhy"></p>
       <p class="rq-foot">Only you can grant this — the agent cannot press the severity buttons. It can only ask.</p>
     </div>
+    <p id="bluenote" hidden>The incident was marked resolved, but checkout-api is still breaching its SLO —
+    nothing was rolled back.</p>
 
     <h2 style="margin-top:20px">Timeline <span>human + agent</span></h2>
     <ul id="tl"></ul>
@@ -400,6 +405,11 @@ function setSeverity(next, by){
     state.lastFired = ALERT;
     state.timeline.unshift({ t:ALERT.fired, by:"system",
       text:`${ALERT.id} fired — ${ALERT.service} error rate 14.2% crossed SLO 0.5%` });
+  }
+  if(next === "green"){                             // green means all clear — nothing may still be failing
+    Object.assign(svc("checkout-api"), {status:"ok", p99:88, err:0.02});
+    Object.assign(svc("payments-worker"), {status:"ok", p99:120, err:0.01});
+    state.lastFired = null;
   }
   log(by, `severity ${prev} → ${next}`);
   syncTools();
@@ -653,6 +663,8 @@ function render(){
     red:    "Click BLUE. Watch the destructive tools unmount — the agent loses them for real.",
     blue:   "Reload to start over.",
   }[state.sev];
+  document.getElementById("bluenote").hidden =
+    state.sev !== "blue" || !state.svcs.some(s => s.status === "failing" || s.status === "degraded");
   const rq = document.getElementById("reqnote");
   rq.hidden = !state.requested;
   if(state.requested){
