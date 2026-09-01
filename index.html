@@ -34,7 +34,7 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
   margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between}
 
 #svchead{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:0 12px 4px}
-#svchead span{font:500 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);min-width:74px;text-align:right}
+#svchead span{font:500 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);min-width:74px;text-align:right;font-variant-numeric:tabular-nums}
 #svchead span:first-child{min-width:0}
 .svc{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--green);
   padding:9px 11px;margin-bottom:6px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center}
@@ -43,7 +43,7 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 .svc.drained{border-left-color:var(--dim);opacity:.55}
 .svc b{font-weight:700}
 .svc .meta{color:var(--dim);font-size:11px}
-.svc .num{font-weight:700;text-align:right;min-width:74px}
+.svc .num{font-weight:700;text-align:right;min-width:74px;font-variant-numeric:tabular-nums}
 .svc .st{font:700 9px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:#fff;
   padding:2px 6px 3px;border-radius:2px;background:var(--dim);vertical-align:1px}
 .svc .st.ok{background:var(--green)}
@@ -101,17 +101,17 @@ button{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase
   border:1.5px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
 button:hover{background:var(--ink);color:var(--panel)}
 button[disabled]{opacity:.35;cursor:not-allowed;background:var(--panel);color:var(--ink)}
-button.current[disabled]{opacity:1;cursor:default;background:var(--ink);color:var(--panel)}
+button.current[disabled]{opacity:1;cursor:default;background:var(--sev);border-color:var(--sev);color:#fff}
+html[data-sev="yellow"] button.current[disabled]{color:var(--ink)}
 button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 button.armed{border-color:var(--sev);color:var(--sev);box-shadow:0 0 0 3px color-mix(in srgb,var(--sev) 20%,transparent)}
 button.danger{border-color:var(--red);color:var(--red)}
 button.danger:hover{background:var(--red);color:#fff}
 
 /* signature: the capability tray */
-.tool{background:var(--panel);border:1px solid var(--rule);padding:8px 10px;margin-bottom:5px;
-  border-left:3px solid var(--rule)}
-.tool.w{border-left-color:var(--amber)}
-.tool.d{border-left-color:var(--red)}
+.tool{background:var(--panel);border:1px solid var(--rule);padding:8px 10px;margin-bottom:5px}
+.tool.w{border-left:3px solid var(--amber)}
+.tool.d{border-left:3px solid var(--red)}
 .tool.firing{background:#EAF1FA;border-color:var(--blue);border-left-color:var(--blue)}
 .tool code{font-weight:700;font-size:13px}
 .tool .kind{float:right;width:66px;text-align:center;font:700 8.5px/1 var(--mono);letter-spacing:.08em;
@@ -133,7 +133,7 @@ button.danger:hover{background:var(--red);color:#fff}
 #tl li.by-agent::before{background:var(--blue)}
 #tl li.by-human::before{background:var(--ink)}
 #tl li.by-system::before{background:var(--dim)}
-#tl time{color:var(--dim);flex:none}
+#tl time{color:var(--dim);flex:none;margin-right:8px}
 .by-agent{color:var(--blue)}.by-human{color:var(--ink)}.by-system{color:var(--dim)}
 
 #veil{position:fixed;inset:0;background:rgba(16,23,28,.55);display:none;place-items:center;z-index:20;padding:20px}
@@ -641,6 +641,7 @@ async function syncTools(){
 function render(){
   document.documentElement.style.setProperty("--sev",
     `var(${({green:"--green", yellow:"--amber", red:"--red", blue:"--blue"})[state.sev]})`);
+  document.documentElement.dataset.sev = state.sev;
   document.getElementById("spine").firstElementChild.style.height =
     ({green:"25%", yellow:"55%", red:"100%", blue:"70%"})[state.sev];
   document.getElementById("sevpill").textContent = state.sev + (state.maintenance ? " · maintenance" : "");
@@ -663,7 +664,7 @@ function render(){
   const bar = document.getElementById("sevbtns"); bar.innerHTML = "";
   SEV.forEach(s => {
     const b = document.createElement("button");
-    b.textContent = (visitedSev.has(s) ? "✓ " : "") + s; b.disabled = s === state.sev;
+    b.textContent = (visitedSev.has(s) && s !== state.sev ? "· " : "") + s; b.disabled = s === state.sev;
     if(s === state.sev) b.classList.add("current");
     if(state.requested?.to === s) b.classList.add("armed");
     b.onclick = () => setSeverity(s, "human");
