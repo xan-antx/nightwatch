@@ -56,6 +56,29 @@ Registration feature-detects `document.modelContext` with a
 `navigator.modelContext` fallback, since the API moved to `document` in the
 21 July draft and Chrome 150 deprecates the old location.
 
+## Why the data is synthetic
+
+The five services, the alert, the logs and the deploy diff are all fixtures in
+`index.html`. That is deliberate, not a shortcut.
+
+An incident has to be reproducible. Anyone opening this — at any hour, from any
+timezone — gets the same failure, the same root cause in the 03:04 deploy, and
+the same fix. Wired to live telemetry there would be nothing wrong to
+investigate most of the time, and a demo that only works during an outage is
+not a demo.
+
+What is *not* simulated is the part being demonstrated: tool registration
+through `document.modelContext`, unregistration via `AbortSignal` verified
+against the browser's own `getTools()`, destructive calls blocking on a real
+DOM click for as long as it takes, and the agent reasoning its way to an
+escalation request from tool output alone. All of it confirmed in ChatGPT's
+desktop browser — `probe.html` is the test that established what that browser
+actually implements.
+
+Pointing this at a real estate means replacing fourteen function bodies with
+calls to a real logging and deploy system. The tool definitions, the severity
+lifecycle, and the approval gate would not change.
+
 ## Run it locally
 
 WebMCP needs a secure context, so `file://` won't register tools.
