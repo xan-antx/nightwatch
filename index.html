@@ -581,7 +581,8 @@ async function syncTools(){
 
 /* ───────── render ───────── */
 function render(){
-  document.documentElement.style.setProperty("--sev", `var(--${state.sev})`);
+  document.documentElement.style.setProperty("--sev",
+    `var(${({green:"--green", yellow:"--amber", red:"--red", blue:"--blue"})[state.sev]})`);
   document.getElementById("spine").firstElementChild.style.height =
     ({green:"25%", yellow:"55%", red:"100%", blue:"70%"})[state.sev];
   document.getElementById("sevpill").textContent = state.sev + (state.maintenance ? " · maintenance" : "");
