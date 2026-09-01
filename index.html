@@ -261,26 +261,56 @@ const svc = id => state.svcs.find(s => s.id === id);
 const visitedSev = new Set();          // severities seen this session, for the guided path
 
 /* ───────── charts: checkout-api history, hand-drawn inline SVG ───────── */
-const series = [                            // seeded so the charts are never empty at green
-  { t:"03:00", p99:86, err:0.02 },
-  { t:"03:02", p99:88, err:0.02 },
-  { t:"03:04", p99:92, err:0.03, deploy:true },
-  { t:"03:06", p99:95, err:0.03 },
-];
-let lastSample = null, alertSampled = false;
-function samplePoint(){                     // append when the console's state actually changed
+const SIM_STEP = 30, TICK_MS = 3000, MAX_POINTS = 120;
+const fmtSim = s => `${String(Math.floor(s/3600)).padStart(2,"0")}:${String(Math.floor(s/60)%60).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+const jitter = (a, b) => a + Math.random() * (b - a);
+let simSec = 3 * 3600;                      // simulated clock starts at 03:00
+const series = [];                          // seeded: one point per 30s of simulated time
+for(let i = 0; i < 36; i++){
+  series.push({ t: fmtSim(simSec), p99: Math.round(jitter(85, 95)), err: +jitter(0.005, 0.045).toFixed(3) });
+  simSec += SIM_STEP;
+}
+series[8].deploy = true;                    // 03:04 — the checkout-api config deploy
+
+const live = { p99: 90, err: 0.02 };        // eased view of the console's truth
+let alertStamped = false;
+function appendPoint(){
+  const c = svc("checkout-api");
+  for(const k of ["p99", "err"]){           // fast attack, slow decay — recovery is a curve, not a step
+    live[k] += (c[k] - live[k]) * (c[k] > live[k] ? .8 : .3);
+  }
+  let p99, err;
+  if(live.p99 > 300){                       // degraded: high AND noisy — spikes, partial recoveries, spikes again
+    p99 = Math.round(live.p99 * jitter(.72, 1.22));
+    err = +Math.max(live.err * jitter(.6, 1.3), 0.5).toFixed(2);
+  }else{                                    // healthy: alive, not a ruler
+    p99 = Math.round(Math.min(Math.max(live.p99 + jitter(-5, 5), 82), 300));
+    err = +Math.max(live.err + jitter(-0.012, 0.012), 0).toFixed(3);
+  }
+  let t = fmtSim(simSec); simSec += SIM_STEP;
+  if(state.lastFired && !alertStamped && p99 > 300){ t = ALERT.fired; alertStamped = true; }
+  series.push({ t, p99, err });
+  if(series.length > MAX_POINTS) series.shift();
+  return true;
+}
+
+let lastSample = null;
+function sampleIfStateChanged(){            // reduced-motion fallback: no timer, but state changes still chart
   const c = svc("checkout-api");
   const key = [state.sev, c.p99, c.err, state.drained.join(","), state.maintenance].join("|");
   if(lastSample === key) return false;
   const first = lastSample === null;
   lastSample = key;
-  if(first) return false;                   // boot at green — the seeds already cover it
-  let t = clock().slice(0, 5);
-  if(state.lastFired && !alertSampled){ t = ALERT.fired; alertSampled = true; }  // the 03:07 spike
-  series.push({ t, p99:c.p99, err:c.err });
-  if(series.length > 60) series.shift();
+  if(first) return false;
+  series.push({ t: fmtSim(simSec), p99: c.p99, err: c.err });
+  simSec += SIM_STEP;
+  if(series.length > MAX_POINTS) series.shift();
   return true;
 }
+
+const chartTimer = matchMedia("(prefers-reduced-motion: reduce)").matches
+  ? null                                    // reduced motion: no self-moving line
+  : setInterval(() => drawCharts(appendPoint()), TICK_MS);
 
 function drawChart(svgId, nowId, get, slo, unit){
   const el = document.getElementById(svgId);
@@ -680,7 +710,8 @@ function render(){
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
     .map(e => `<li><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
 
-  drawCharts(samplePoint());   // append a history point if console state changed, then redraw
+  // with the timer running it owns the chart data; without it (reduced motion), state changes still chart
+  drawCharts(chartTimer ? false : sampleIfStateChanged());
 }
 
 /* ───────── boot ───────── */
