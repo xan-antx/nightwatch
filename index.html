@@ -96,6 +96,11 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 .sevbtns button:last-child{border-radius:0 2px 2px 0}
 .sevbtns button.armed{position:relative;z-index:1;border-left-width:1.5px;margin-left:-1.5px}
 .sevbtns button.armed:first-child{margin-left:0}
+/* hover hints in the segment's own hue — quieter than the filled current segment */
+.sevbtns button[data-sev="green"]:not([disabled]):hover{background:color-mix(in srgb, var(--green) 12%, var(--panel));color:var(--green)}
+.sevbtns button[data-sev="yellow"]:not([disabled]):hover{background:color-mix(in srgb, var(--amber) 14%, var(--panel));color:color-mix(in srgb, var(--amber) 72%, black)}
+.sevbtns button[data-sev="red"]:not([disabled]):hover{background:color-mix(in srgb, var(--red) 12%, var(--panel));color:var(--red)}
+.sevbtns button[data-sev="blue"]:not([disabled]):hover{background:color-mix(in srgb, var(--blue) 12%, var(--panel));color:var(--blue)}
 #sevguide{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 button{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;
   border:1.5px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
