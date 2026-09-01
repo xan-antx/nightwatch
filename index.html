@@ -343,9 +343,20 @@ function sampleIfStateChanged(){            // reduced-motion fallback: no timer
   return true;
 }
 
+function syncCheckoutRow(){                 // keep the services row on the same number the chart just plotted
+  const cur = series[series.length - 1];
+  const idx = state.svcs.findIndex(s => s.id === "checkout-api");
+  const row = document.querySelectorAll("#svcs .svc")[idx];
+  if(!cur || !row) return;
+  const nums = row.querySelectorAll(".num");
+  nums[0].textContent = `${cur.p99}ms`;
+  nums[1].textContent = `${cur.err.toFixed(2)}%`;
+  nums[1].classList.toggle("bad", cur.err > 1);
+}
+
 const chartTimer = matchMedia("(prefers-reduced-motion: reduce)").matches
   ? null                                    // reduced motion: no self-moving line
-  : setInterval(() => drawCharts(appendPoint()), TICK_MS);
+  : setInterval(() => { drawCharts(appendPoint()); syncCheckoutRow(); }, TICK_MS);
 
 function drawChart(svgId, nowId, get, slo, unit){
   const el = document.getElementById(svgId);
@@ -669,13 +680,19 @@ function render(){
   else { a.className = "none"; a.innerHTML = `<b>alerts</b>Nothing firing. All services within SLO.`; }
 
   document.getElementById("svcmeta").textContent = state.drained.length ? `${state.drained.join(", ")} drained` : "";
-  document.getElementById("svcs").innerHTML = state.svcs.map(s => `
+  const curPt = series[series.length - 1];
+  document.getElementById("svcs").innerHTML = state.svcs.map(s => {
+    // checkout-api displays the same live simulated value the chart plots; status stays threshold-driven
+    const isLive = s.id === "checkout-api" && curPt;
+    const p99 = isLive ? curPt.p99 : s.p99, errV = isLive ? curPt.err : s.err;
+    return `
     <div class="svc ${state.drained.includes(s.region) ? "drained" : s.status}">
       <div><b>${s.id}</b> <span class="st ${state.drained.includes(s.region) ? "drained" : s.status}">${state.drained.includes(s.region) ? "drained" : s.status}</span>
         <span class="meta">${s.version} · ${s.region} · ${s.owner}</span></div>
-      <div class="num">${s.p99}ms</div>
-      <div class="num ${s.err > 1 ? "bad" : ""}">${s.err.toFixed(2)}%</div>
-    </div>`).join("");
+      <div class="num">${p99}ms</div>
+      <div class="num ${errV > 1 ? "bad" : ""}">${errV.toFixed(2)}%</div>
+    </div>`;
+  }).join("");
 
   visitedSev.add(state.sev);
   const bar = document.getElementById("sevbtns"); bar.innerHTML = "";
