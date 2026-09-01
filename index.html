@@ -44,8 +44,12 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 .svc b{font-weight:700}
 .svc .meta{color:var(--dim);font-size:11px}
 .svc .num{font-weight:700;text-align:right;min-width:74px}
-.svc .st{font:700 10px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
-.svc .st.ok{font-weight:400;color:var(--dim)}
+.svc .st{font:700 9px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:#fff;
+  padding:2px 6px 3px;border-radius:2px;background:var(--dim);vertical-align:1px}
+.svc .st.ok{background:var(--green)}
+.svc .st.failing{background:var(--red)}
+.svc .st.degraded{background:var(--amber);color:var(--ink)}
+.svc .st.drained{background:var(--dim)}
 .svc .num.bad{color:var(--red)}
 
 #intro{margin:0 0 16px;padding:0 0 12px;border-bottom:1px solid var(--rule)}
@@ -80,12 +84,18 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 .ch-mark{stroke:var(--rule);stroke-dasharray:2 3}
 .ch-label{font:500 8px var(--mono);fill:var(--dim);letter-spacing:.08em;text-transform:uppercase}
 
-#alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
+#alertbox{background:color-mix(in srgb, var(--amber) 14%, var(--panel));border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
 #alertbox b{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:5px}
+#alertbox strong{font-weight:700}
 
-.sevbtns{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 8px;align-items:center}
-.sevflow{color:var(--dim);font-size:11px;user-select:none}
+.sevbtns{display:flex;gap:0;flex-wrap:wrap;margin:14px 0 8px;align-items:stretch}
+.sevbtns button{border-radius:0}
+.sevbtns button + button{border-left-width:0}
+.sevbtns button:first-child{border-radius:2px 0 0 2px}
+.sevbtns button:last-child{border-radius:0 2px 2px 0}
+.sevbtns button.armed{position:relative;z-index:1;border-left-width:1.5px;margin-left:-1.5px}
+.sevbtns button.armed:first-child{margin-left:0}
 #sevguide{margin:0 0 10px;color:var(--dim);font-size:11px;line-height:1.5}
 button{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;
   border:1.5px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;border-radius:2px}
@@ -103,20 +113,26 @@ button.danger:hover{background:var(--red);color:#fff}
 .tool.w{border-left-color:var(--amber)}
 .tool.d{border-left-color:var(--red)}
 .tool.firing{background:#EAF1FA;border-color:var(--blue);border-left-color:var(--blue)}
-.tool code{font-weight:700;font-size:12px}
-.tool .kind{float:right;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
-  border:1px solid var(--rule);padding:1px 4px;border-radius:2px}
-.tool .kind.w{color:var(--amber);border-color:var(--amber)}
-.tool .kind.d{color:var(--red);border-color:var(--red)}
-.tool p{margin:4px 0 0;color:var(--dim);font-size:11px;line-height:1.4}
+.tool code{font-weight:700;font-size:13px}
+.tool .kind{float:right;width:66px;text-align:center;font:700 8.5px/1 var(--mono);letter-spacing:.08em;
+  text-transform:uppercase;color:var(--dim);padding:3px 0;border-radius:2px;
+  background:color-mix(in srgb, var(--dim) 14%, var(--panel))}
+.tool .kind.w{color:color-mix(in srgb, var(--amber) 72%, black);background:color-mix(in srgb, var(--amber) 16%, var(--panel))}
+.tool .kind.d{color:var(--red);background:color-mix(in srgb, var(--red) 12%, var(--panel))}
+.tool p{margin:5px 0 0;color:var(--dim);font-size:10.5px;line-height:1.45}
 .locked{border:1px dashed var(--rule);padding:8px 10px;margin-bottom:5px;color:var(--dim);font-size:11px}
-.locked code{opacity:.65}
+.locked code{color:var(--ink)}
 #truth{margin-top:12px;padding:8px 10px;border:1px solid var(--rule);background:var(--panel);
   font-size:11px;line-height:1.5;color:var(--dim)}
 #truth b{color:var(--ink)}
 
 #tl{list-style:none;margin:0;padding:0;max-height:280px;overflow:auto}
-#tl li{padding:5px 0;border-bottom:1px dotted var(--rule);display:flex;gap:8px;font-size:11.5px}
+#tl li{padding:7px 0;border-bottom:1px solid color-mix(in srgb, var(--rule) 55%, transparent);
+  display:flex;gap:8px;font-size:11.5px;align-items:baseline}
+#tl li::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;align-self:center;background:var(--rule)}
+#tl li.by-agent::before{background:var(--blue)}
+#tl li.by-human::before{background:var(--ink)}
+#tl li.by-system::before{background:var(--dim)}
 #tl time{color:var(--dim);flex:none}
 .by-agent{color:var(--blue)}.by-human{color:var(--ink)}.by-system{color:var(--dim)}
 
@@ -319,7 +335,7 @@ const chartTimer = matchMedia("(prefers-reduced-motion: reduce)").matches
 
 function drawChart(svgId, nowId, get, slo, unit){
   const el = document.getElementById(svgId);
-  const w = el.clientWidth || 300, h = 64, px = 3, pt = 12, pb = 4;
+  const w = el.clientWidth || 300, h = 64, px = 3, pt = 12, pb = 13;
   const vals = series.map(get);
   const maxV = Math.max(slo * 1.35, Math.max(...vals) * 1.1);
   const X = i => +(px + (w - 2 * px) * i / Math.max(series.length - 1, 1)).toFixed(1);
@@ -343,6 +359,8 @@ function drawChart(svgId, nowId, get, slo, unit){
   const di = series.findIndex(p => p.deploy);
   const now = vals[vals.length - 1];
   el.innerHTML =
+    `<text class="ch-label" x="${px}" y="${h - 1}">${series[0].t.slice(0, 5)}</text>` +
+    `<text class="ch-label" x="${w - px}" y="${h - 1}" text-anchor="end">now</text>` +
     `<line class="ch-slo" x1="${px}" y1="${Y(slo)}" x2="${w - px}" y2="${Y(slo)}"></line>` +
     `<text class="ch-label" x="${w - px}" y="${(Y(slo) - 4).toFixed(1)}" text-anchor="end">SLO ${slo}${unit}</text>` +
     (di < 0 ? "" :
@@ -628,7 +646,8 @@ function render(){
   document.getElementById("sevpill").textContent = state.sev + (state.maintenance ? " · maintenance" : "");
 
   const a = document.getElementById("alertbox");
-  if(state.lastFired){ a.className = ""; a.innerHTML = `<b>critical alert · ${state.lastFired.id} · fired ${state.lastFired.fired}</b>${state.lastFired.text}`; }
+  if(state.lastFired){ a.className = ""; a.innerHTML = `<b>critical alert · ${state.lastFired.id} · fired ${state.lastFired.fired}</b>` +
+    state.lastFired.text.replace(/(\d+(?:\.\d+)?%|\d+ms)/g, "<strong>$1</strong>"); }
   else { a.className = "none"; a.innerHTML = `<b>alerts</b>Nothing firing. All services within SLO.`; }
 
   document.getElementById("svcmeta").textContent = state.drained.length ? `${state.drained.join(", ")} drained` : "";
@@ -642,12 +661,7 @@ function render(){
 
   visitedSev.add(state.sev);
   const bar = document.getElementById("sevbtns"); bar.innerHTML = "";
-  SEV.forEach((s, i) => {
-    if(i){
-      const sep = document.createElement("span");
-      sep.className = "sevflow"; sep.textContent = "→"; sep.setAttribute("aria-hidden", "true");
-      bar.appendChild(sep);
-    }
+  SEV.forEach(s => {
     const b = document.createElement("button");
     b.textContent = (visitedSev.has(s) ? "✓ " : "") + s; b.disabled = s === state.sev;
     if(s === state.sev) b.classList.add("current");
@@ -720,7 +734,7 @@ function render(){
   document.getElementById("truth").hidden = state.syncMode === "—";
   document.getElementById("truth").textContent = state.syncMode;
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
-    .map(e => `<li><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
+    .map(e => `<li class="by-${e.by}"><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
 
   // with the timer running it owns the chart data; without it (reduced motion), state changes still chart
   drawCharts(chartTimer ? false : sampleIfStateChanged());
