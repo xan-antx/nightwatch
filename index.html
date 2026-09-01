@@ -67,6 +67,18 @@ h2{font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;col
 #reqnote .rq-why{margin:0 0 8px;font-size:12px;line-height:1.55;color:var(--ink)}
 #reqnote .rq-foot{margin:0;font-size:11px;line-height:1.5;color:var(--dim)}
 
+#charts{display:flex;gap:6px;margin:12px 0 0}
+#charts figure{flex:1;min-width:0;margin:0;background:var(--panel);border:1px solid var(--rule);padding:8px 10px 6px}
+#charts figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  font:500 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+#charts figcaption b{font:700 11px/1 var(--mono);color:var(--ink)}
+#charts svg{display:block;width:100%;height:64px}
+.ch-live{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round}
+.ch-breach{fill:none;stroke:var(--red);stroke-width:2;stroke-linecap:round}
+.ch-slo{stroke:var(--dim);stroke-dasharray:4 3}
+.ch-mark{stroke:var(--rule);stroke-dasharray:2 3}
+.ch-label{font:500 8px var(--mono);fill:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+
 #alertbox{background:#FCF3E2;border:1px solid var(--amber);padding:11px 13px;margin-bottom:14px}
 #alertbox.none{background:var(--panel);border-color:var(--rule);color:var(--dim)}
 #alertbox b{font:700 10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--amber);display:block;margin-bottom:5px}
@@ -115,7 +127,8 @@ button.danger:hover{background:var(--red);color:#fff}
 #modal pre{background:#EDF0F2;border:1px solid var(--rule);padding:9px;margin:0 0 13px;font-size:11.5px;white-space:pre-wrap}
 #modal .row{display:flex;gap:8px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:900px){main{grid-template-columns:1fr}.col+.col{border-left:0;border-top:2px solid var(--rule);min-height:0}}
+@media (max-width:900px){main{grid-template-columns:1fr}.col+.col{border-left:0;border-top:2px solid var(--rule);min-height:0}
+  #charts{flex-direction:column}}
 </style>
 </head>
 <body>
@@ -145,6 +158,17 @@ button.danger:hover{background:var(--red);color:#fff}
     <h2>Services <span id="svcmeta"></span></h2>
     <div id="svchead"><span></span><span>p99</span><span>error rate</span></div>
     <div id="svcs"></div>
+
+    <div id="charts">
+      <figure>
+        <figcaption><span>checkout-api p99 · ms</span><b id="p99now">—</b></figcaption>
+        <svg id="chart-p99" role="img"></svg>
+      </figure>
+      <figure>
+        <figcaption><span>checkout-api error rate · %</span><b id="errnow">—</b></figcaption>
+        <svg id="chart-err" role="img"></svg>
+      </figure>
+    </div>
 
     <h2 style="margin-top:20px">Severity <span>only you can change this</span></h2>
     <div class="sevbtns" id="sevbtns"></div>
@@ -236,7 +260,84 @@ const state = {
 const svc = id => state.svcs.find(s => s.id === id);
 const visitedSev = new Set();          // severities seen this session, for the guided path
 
-/* ───────── motion: exactly three animated moments, nothing else ───────── */
+/* ───────── charts: checkout-api history, hand-drawn inline SVG ───────── */
+const series = [                            // seeded so the charts are never empty at green
+  { t:"03:00", p99:86, err:0.02 },
+  { t:"03:02", p99:88, err:0.02 },
+  { t:"03:04", p99:92, err:0.03, deploy:true },
+  { t:"03:06", p99:95, err:0.03 },
+];
+let lastSample = null, alertSampled = false;
+function samplePoint(){                     // append when the console's state actually changed
+  const c = svc("checkout-api");
+  const key = [state.sev, c.p99, c.err, state.drained.join(","), state.maintenance].join("|");
+  if(lastSample === key) return false;
+  const first = lastSample === null;
+  lastSample = key;
+  if(first) return false;                   // boot at green — the seeds already cover it
+  let t = clock().slice(0, 5);
+  if(state.lastFired && !alertSampled){ t = ALERT.fired; alertSampled = true; }  // the 03:07 spike
+  series.push({ t, p99:c.p99, err:c.err });
+  if(series.length > 60) series.shift();
+  return true;
+}
+
+function drawChart(svgId, nowId, get, slo, unit){
+  const el = document.getElementById(svgId);
+  const w = el.clientWidth || 300, h = 64, px = 3, pt = 12, pb = 4;
+  const vals = series.map(get);
+  const maxV = Math.max(slo * 1.35, Math.max(...vals) * 1.1);
+  const X = i => +(px + (w - 2 * px) * i / Math.max(series.length - 1, 1)).toFixed(1);
+  const Y = v => +(h - pb - (v / maxV) * (h - pt - pb)).toFixed(1);
+  let calm = "", hot = "";
+  const fresh = [];
+  for(let i = 1; i < vals.length; i++){
+    const v0 = vals[i - 1], v1 = vals[i];
+    const parts = [];
+    if((v0 - slo) * (v1 - slo) < 0){        // crosses the SLO line — split so the colour flips there
+      const xm = +(px + (w - 2 * px) * ((i - 1 + (slo - v0) / (v1 - v0)) / Math.max(series.length - 1, 1))).toFixed(1);
+      parts.push({ x0:X(i-1), v0, x1:xm, v1:slo, hot: v0 > slo });
+      parts.push({ x0:xm, v0:slo, x1:X(i), v1, hot: v1 > slo });
+    }else parts.push({ x0:X(i-1), v0, x1:X(i), v1, hot: v0 > slo || v1 > slo });
+    for(const s of parts){
+      const d = `M${s.x0} ${Y(s.v0)}L${s.x1} ${Y(s.v1)}`;
+      if(i === vals.length - 1) fresh.push({ d, hot:s.hot });
+      else if(s.hot) hot += d; else calm += d;
+    }
+  }
+  const di = series.findIndex(p => p.deploy);
+  const now = vals[vals.length - 1];
+  el.innerHTML =
+    `<line class="ch-slo" x1="${px}" y1="${Y(slo)}" x2="${w - px}" y2="${Y(slo)}"></line>` +
+    `<text class="ch-label" x="${w - px}" y="${(Y(slo) - 4).toFixed(1)}" text-anchor="end">SLO ${slo}${unit}</text>` +
+    (di < 0 ? "" :
+      `<line class="ch-mark" x1="${X(di)}" y1="${pt - 4}" x2="${X(di)}" y2="${h - pb}"></line>` +
+      `<text class="ch-label" x="${X(di) + 3}" y="8">deploy 03:04</text>`) +
+    (calm ? `<path class="ch-live" d="${calm}"></path>` : "") +
+    (hot ? `<path class="ch-breach" d="${hot}"></path>` : "") +
+    fresh.map(s => `<path class="${s.hot ? "ch-breach" : "ch-live"} seg-new" d="${s.d}"></path>`).join("");
+  el.setAttribute("aria-label",
+    `checkout-api ${unit === "%" ? "error rate" : "p99 latency"} ${now}${unit}, SLO ${slo}${unit}, ${now > slo ? "breaching" : "within"} SLO`);
+  const nb = document.getElementById(nowId);
+  nb.textContent = (unit === "%" ? now.toFixed(2) : now) + unit;
+  nb.style.color = now > slo ? "var(--red)" : "var(--ink)";
+}
+
+function drawCharts(withMotion){
+  if(!document.getElementById("chart-p99")) return;
+  drawChart("chart-p99", "p99now", p => p.p99, 300, "ms");
+  drawChart("chart-err", "errnow", p => p.err, 0.5, "%");
+  if(withMotion && canAnimate()){           // the newest segment draws itself in; reduced motion draws straight
+    for(const p of document.querySelectorAll("#charts .seg-new")){
+      const len = p.getTotalLength();
+      p.style.strokeDasharray = len;
+      Motion.animate(p, { strokeDashoffset: [len, 0] }, { duration: .4, ease: "easeOut" });
+    }
+  }
+}
+addEventListener("resize", () => drawCharts(false));
+
+/* ───────── motion: the animated moments — mount, unmount, stats tick, newest chart segment ───────── */
 const canAnimate = () => !!window.Motion && !matchMedia("(prefers-reduced-motion: reduce)").matches;
 let trayShown = null;                      // tool names displayed last render; null until first paint
 const reconVals = {};                      // id -> {val, anim} for the stats tick
@@ -577,6 +678,8 @@ function render(){
   document.getElementById("truth").textContent = state.syncMode;
   document.getElementById("tl").innerHTML = state.timeline.slice(0,60)
     .map(e => `<li><time>${e.t}</time><span class="by-${e.by}">${e.text}</span></li>`).join("");
+
+  drawCharts(samplePoint());   // append a history point if console state changed, then redraw
 }
 
 /* ───────── boot ───────── */
